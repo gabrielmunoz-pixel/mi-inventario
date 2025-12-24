@@ -12,14 +12,13 @@ except:
     st.error("Error: Revisa los Secrets en Streamlit Cloud.")
     st.stop()
 
-# --- 2. DISEÑO VISUAL ---
+# --- 2. DISEÑO VISUAL (MANTENIDO) ---
 st.markdown("""
     <style>
     .stApp { background-color: #000000; color: #FFFFFF; }
     [data-testid="stSidebar"] { background-color: #111111; border-right: 1px solid #333; }
     .stMarkdown, p, label, .stMetric, span, .stHeader, .stTab { color: #FFFFFF !important; }
     
-    /* BOTÓN BLANCO: Texto negro y grueso */
     div.stButton > button {
         background-color: #FFFFFF !important;
         color: #000000 !important;
@@ -57,21 +56,20 @@ def extraer_valor_formato(formato_str):
 def registro_pantalla(local_id):
     st.header("📥 Registro de Movimiento")
     
-    # Obtener productos
     res = supabase.table("productos_maestro").select("*").execute().data
     if not res: return
 
     prod_map = {f"{p['nombre']} | {p['formato_medida']}": p for p in res}
     
-    # 1ra MODIFICACIÓN: Mejorar búsqueda en celulares (teclado automático)
-    # Se usa placeholder para incentivar el toque y la búsqueda
-    seleccion = st.selectbox(
-        "Buscar Producto:", 
-        options=[""] + list(prod_map.keys()),
-        index=0,
-        placeholder="Toca aquí para escribir...",
-        help="Al tocar aquí se activará el teclado de tu celular para buscar."
-    )
+    # SOLUCIÓN PARA TECLADO EN CELULARES:
+    # Primero un input de texto para filtrar y forzar el teclado
+    busqueda = st.text_input("🔍 Escribe el nombre del producto:", placeholder="Escribe para buscar...")
+    
+    # Filtramos las opciones según lo que el usuario escribe
+    opciones_filtradas = [opc for opc in prod_map.keys() if busqueda.lower() in opc.lower()]
+    
+    # Luego el selectbox solo muestra lo filtrado
+    seleccion = st.selectbox("Selecciona el producto exacto:", [""] + opciones_filtradas)
     
     if seleccion:
         p = prod_map[seleccion]
@@ -89,7 +87,6 @@ def registro_pantalla(local_id):
             cantidad_ingresada = st.number_input("Cantidad:", min_value=0.0, step=1.0)
             unid = st.selectbox("Unidad:", ["Unitario", "gramos", "cc", "kilos", "litros"])
         
-        # Conversión lógica
         if unid == "Unitario":
             total_unidades_minimas = cantidad_ingresada * factor
         else:
@@ -102,16 +99,11 @@ def registro_pantalla(local_id):
             elif cantidad_ingresada > 0:
                 valor_final = total_unidades_minimas if tipo == "ENTRADA" else -total_unidades_minimas
                 
-                # Guardar en BD
                 supabase.table("movimientos_inventario").insert({
-                    "id_local": local_id, 
-                    "id_producto": p['id'], 
-                    "cantidad": valor_final, 
-                    "tipo_movimiento": tipo, 
-                    "ubicacion": ubi
+                    "id_local": local_id, "id_producto": p['id'], "cantidad": valor_final, "tipo_movimiento": tipo, "ubicacion": ubi
                 }).execute()
                 
-                # 2da MODIFICACIÓN: Actualización de Stock y mensaje de éxito
+                # ACTUALIZACIÓN INMEDIATA EN EL MENSAJE
                 nuevo_total_umb = stock_total_minimo + valor_final
                 nuevo_stock_fisico = round(nuevo_total_umb / factor, 2)
                 
@@ -121,9 +113,6 @@ def registro_pantalla(local_id):
                 * **Movimiento:** {tipo} de {cantidad_ingresada} {unid}
                 * **Stock Actualizado:** {nuevo_stock_fisico} Unidades ({round(nuevo_total_umb, 2)} {p['umb']})
                 """)
-                
-                # Nota: No usamos st.rerun() inmediato para que el usuario vea el cambio en el mensaje.
-                # El stock se actualizará en la barra azul (st.info) en la siguiente interacción o recarga.
 
 def reportes_pantalla(locales_dict):
     st.header("📊 Reportes de Inventario")
@@ -135,14 +124,12 @@ def reportes_pantalla(locales_dict):
     if data:
         df = pd.json_normalize(data)
         df_stock = df.groupby(['productos_maestro.nombre', 'productos_maestro.formato_medida', 'productos_maestro.umb']).agg({'cantidad': 'sum'}).reset_index()
-        
         df_stock['factor'] = df_stock['productos_maestro.formato_medida'].apply(extraer_valor_formato)
         df_stock['Stock'] = (df_stock['cantidad'] / df_stock['factor']).round(2)
         df_stock['StockUMB'] = df_stock['cantidad'].round(2)
         
         df_final = df_stock[['productos_maestro.nombre', 'productos_maestro.formato_medida', 'Stock', 'productos_maestro.umb', 'StockUMB']]
         df_final.columns = ['Producto', 'Formato', 'Stock', 'UMB', 'StockUMB']
-        
         st.dataframe(df_final, use_container_width=True)
 
 def mantenedor_usuarios(locales_dict):
@@ -156,10 +143,8 @@ def mantenedor_usuarios(locales_dict):
             p = st.text_input("Clave")
             r = st.selectbox("Rol", ["Staff", "Admin"])
             if st.form_submit_button("GUARDAR / ACTUALIZAR"):
-                supabase.table("usuarios_sistema").upsert({
-                    "nombre_apellido": n, "id_local": locales_dict[l_sel], "usuario": u, "clave": p, "rol": r
-                }, on_conflict="usuario").execute()
-                st.success("Usuario procesado correctamente.")
+                supabase.table("usuarios_sistema").upsert({"nombre_apellido": n, "id_local": locales_dict[l_sel], "usuario": u, "clave": p, "rol": r}, on_conflict="usuario").execute()
+                st.success("Usuario procesado.")
     with t2:
         res = supabase.table("usuarios_sistema").select("*").execute().data
         if res:
@@ -179,7 +164,7 @@ def admin_panel():
         edited_df = st.data_editor(df_prod, num_rows="dynamic", use_container_width=True)
         if st.button("GUARDAR CAMBIOS"):
             supabase.table("productos_maestro").upsert(edited_df.to_dict(orient='records')).execute()
-            st.success("Base de datos actualizada con éxito.")
+            st.success("Base de datos actualizada.")
 
 def main():
     if 'auth_user' not in st.session_state:
@@ -212,9 +197,10 @@ def main():
         user['local'] = locales_dict[nuevo_local]
 
     st.sidebar.markdown(f"**Usuario:** {user['user']} | **Sede:** {locales_inv.get(user['local'])}")
-    menu = ["📥 Registro Movimiento", "📊 Reportes"]
-    if user['role'] == "Admin": menu.extend(["👤 Mantenedor Usuarios", "⚙️ Maestro Productos"])
-    choice = st.sidebar.radio("Navegación", menu)
+    menu = ["📥 Registro Movimiento", "📊 Reportes", "👤 Mantenedor Usuarios", "⚙️ Maestro Productos"]
+    # Filtro de menú por rol
+    actual_menu = menu if user['role'] == "Admin" else menu[:2]
+    choice = st.sidebar.radio("Navegación", actual_menu)
 
     if st.sidebar.button("Cerrar Sesión"):
         del st.session_state.auth_user
