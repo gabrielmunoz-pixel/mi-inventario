@@ -2,42 +2,24 @@ import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
 
-# --- CIBERSEGURIDAD: CARGA DE SECRETS ---
+# --- CONFIGURACIÓN DE CONEXIÓN ---
 try:
     URL = st.secrets["SUPABASE_URL"]
     KEY = st.secrets["SUPABASE_KEY"]
     supabase: Client = create_client(URL, KEY)
-except Exception as e:
-    st.error("Error de configuración: Verifica los Secrets en Streamlit Cloud.")
+except:
+    st.error("Configura los Secrets en Streamlit.")
     st.stop()
 
-# --- DISEÑO VISUAL "ALEMAN EXPERTO" ---
+# --- DISEÑO VISUAL "ALEMAN EXPERTO" (FONDO NEGRO / TEXTO BLANCO) ---
 st.markdown("""
     <style>
-    /* Fondo oscuro y fuentes */
-    .stApp { background-color: #111827; color: #F3F4F6; }
-    .stSidebar { background-color: #1F2937; }
-    
-    /* Encabezados con color Dorado/Amarillo del logo */
-    h1, h2, h3 { color: #FFCC00 !important; font-family: 'Inter', sans-serif; }
-    
-    /* Estilo de tarjetas (Cards) como en tu ejemplo */
-    .stMetric {
-        background-color: #374151;
-        padding: 15px;
-        border-radius: 10px;
-        border-left: 5px solid #DD0000; /* Rojo Alemán */
-    }
-    
-    /* Botones personalizados */
-    .stButton>button {
-        background-color: #DD0000;
-        color: white;
-        border: none;
-        width: 100%;
-        font-weight: bold;
-    }
-    .stButton>button:hover { background-color: #FF0000; color: white; }
+    .stApp { background-color: #000000; color: #FFFFFF; }
+    [data-testid="stSidebar"] { background-color: #111111; }
+    .stMarkdown, p, label { color: #FFFFFF !important; }
+    .stSelectbox div[data-baseweb="select"] > div { background-color: #222222; color: white; }
+    .stButton>button { background-color: #DD0000; color: white; border: none; }
+    h1, h2, h3 { color: #FFCC00 !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -47,106 +29,101 @@ def main():
         return
 
     user = st.session_state.auth_user
-    
-    # Barra lateral con navegación
     st.sidebar.image("Logo AE.jpg", use_container_width=True)
-    st.sidebar.markdown(f"**Usuario:** {user['user']} | **Local:** {user['local']}")
     
-    menu = ["📊 Dashboard", "📥 Movimientos", "⚙️ Maestro de Productos"]
-    choice = st.sidebar.radio("Navegación", menu)
+    # Menú de Navegación
+    options = ["📥 Registro Movimiento", "📊 Reportes"]
+    if user['role'] == 'Admin':
+        options.extend(["👤 Mantenedor Usuarios", "⚙️ Maestro Productos"])
+    
+    choice = st.sidebar.radio("Menú", options)
 
-    if choice == "📊 Dashboard":
-        dashboard_consolidado()
-    elif choice == "📥 Movimientos":
-        movimientos_screen(user['local'])
-    elif choice == "⚙️ Maestro de Productos":
+    if choice == "📥 Registro Movimiento":
+        registro_pantalla(user['local'])
+    elif choice == "👤 Mantenedor Usuarios":
+        mantenedor_usuarios()
+    elif choice == "⚙️ Maestro Productos":
         admin_panel()
 
 def login_screen():
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        try:
-            st.image("Logo AE.jpg", width=250)
-        except:
-            st.title("🇩🇪 ALEMAN EXPERTO")
-        
-        with st.form("Login"):
-            user = st.text_input("Usuario")
-            password = st.text_input("Contraseña", type="password") # Seguridad básica
-            local = st.number_input("ID Local", min_value=1, step=1, value=1)
-            if st.form_submit_button("INICIAR SESIÓN"):
-                st.session_state.auth_user = {"user": user, "local": local}
-                st.rerun()
+    st.image("Logo AE.jpg", width=200)
+    with st.form("Login"):
+        u = st.text_input("Usuario")
+        p = st.text_input("Clave", type="password")
+        if st.form_submit_button("INGRESAR"):
+            # Lógica simple: si es 'admin' entra como tal
+            role = 'Admin' if u.lower() == 'admin' else 'Staff'
+            st.session_state.auth_user = {"user": u, "role": role, "local": 1}
+            st.rerun()
 
-def dashboard_consolidado():
-    st.header("📊 Dashboard de Inventario")
-    # Métricas rápidas (Estilo tarjetas del ejemplo)
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Items en Crítico", "12", delta="-2", delta_color="inverse")
-    c2.metric("Movimientos Hoy", "45")
-    c3.metric("Valor Inventario", "$1.2M")
-
-    st.subheader("Stock Actual Global")
-    # Consulta a stock_config con join a productos_maestro
-    data = supabase.table("stock_config").select("*, productos_maestro(*)").execute().data
-    if data:
-        df = pd.json_normalize(data)
-        # Limpieza de nombres de columnas para el usuario
-        df_view = df[['id_local', 'productos_maestro.nombre', 'stock_actual', 'productos_maestro.umb']]
-        st.dataframe(df_view, use_container_width=True)
-
-def movimientos_screen(local_id):
-    st.header(f"📥 Registro de Movimiento - Local {local_id}")
+def registro_pantalla(local_id):
+    st.header("📥 Ingreso de Inventario")
     
-    # Búsqueda por proximidad
-    search = st.text_input("🔍 Buscar Producto por nombre...")
-    res = supabase.table("productos_maestro").select("*").ilike("nombre", f"%{search}%").execute().data
+    # 1. BÚSQUEDA Y SELECCIÓN INTEGRADA
+    res = supabase.table("productos_maestro").select("*").execute().data
+    prod_map = {f"{p['nombre']} ({p['formato_medida']})": p for p in res}
     
-    if res:
-        options = {f"{r['nombre']} ({r['formato_medida']})": r for r in res}
-        sel_name = st.selectbox("Seleccione el producto exacto", list(options.keys()))
-        p = options[sel_name]
-        
+    seleccion = st.selectbox("Buscar y Seleccionar Producto:", [""] + list(prod_map.keys()), help="Escribe para filtrar")
+    
+    if seleccion:
+        p = prod_map[seleccion]
         st.markdown(f"**Unidad Base:** {p['umb']} | **Factor:** {p['factor_conversion']}")
         
-        col1, col2 = st.columns(2)
-        with col1:
-            modo = st.radio("Formato de entrada", [f"Unidad de Compra ({p['unidad_compra']})", f"Unidad Base ({p['umb']})"])
-            cant_user = st.number_input("Cantidad", min_value=0.0)
+        with st.container():
+            col1, col2 = st.columns(2)
+            with col1:
+                ubicacion = st.selectbox("Ubicación:", ["Bodega", "Cámara de frío", "Producción", "Cocina"])
+                tipo_mov = st.radio("Operación:", ["ENTRADA", "SALIDA"])
+            
+            with col2:
+                peso_val = st.number_input("Peso/Cantidad recibida:", min_value=0.0)
+                unidad_peso = st.selectbox("Unidad:", ["gramos", "kilos", "litros", "cc"])
         
-        # CALCULADORA DE CONVERSIÓN
-        total_final = cant_user * float(p['factor_conversion']) if "Unidad de Compra" in modo else cant_user
-        
-        with col2:
-            tipo = st.selectbox("Tipo", ["ENTRADA", "SALIDA"])
-            st.metric("Total a procesar", f"{total_final} {p['umb']}")
+        # CALCULADORA AUTOMÁTICA
+        # Convertimos todo a la UMB del producto para el stock
+        multiplicador = 1000 if unidad_peso in ["kilos", "litros"] else 1
+        total_umb = peso_val * multiplicador
 
-        if st.button("REGISTRAR EN INVENTARIO"):
-            ajuste = total_final if tipo == "ENTRADA" else -total_final
-            # Registro en logs
+        if st.button("CONFIRMAR REGISTRO"):
+            ajuste = total_umb if tipo_mov == "ENTRADA" else -total_umb
+            # Guardar movimiento con los nuevos campos
             supabase.table("movimientos_inventario").insert({
-                "id_local": local_id, "id_producto": p['id'], "cantidad": total_final, "tipo_movimiento": tipo
+                "id_local": local_id, 
+                "id_producto": p['id'], 
+                "cantidad": total_umb, 
+                "tipo_movimiento": tipo_mov,
+                "ubicacion": ubicacion,
+                "peso_verificado": peso_val,
+                "unidad_peso_verificado": unidad_peso
             }).execute()
-            # Actualización de stock_config
-            curr = supabase.table("stock_config").select("stock_actual").eq("id_local", local_id).eq("id_producto", p['id']).execute().data
-            if curr:
-                nuevo = float(curr[0]['stock_actual']) + ajuste
-                supabase.table("stock_config").update({"stock_actual": nuevo}).eq("id_local", local_id).eq("id_producto", p['id']).execute()
-            else:
-                supabase.table("stock_config").insert({"id_local": local_id, "id_producto": p['id'], "stock_actual": ajuste}).execute()
-            st.success("✅ Registro completado exitosamente.")
+            st.success(f"✅ Registrado: {total_umb} {p['umb']} en {ubicacion}")
+
+def mantenedor_usuarios():
+    st.header("👤 Gestión de Usuarios")
+    
+    tab1, tab2 = st.tabs(["Crear Usuario", "Usuarios Activos"])
+    
+    with tab1:
+        with st.form("new_user"):
+            new_u = st.text_input("Nombre de Usuario")
+            new_r = st.selectbox("Rol", ["Staff", "Admin"])
+            new_l = st.number_input("Local Asignado", min_value=1, value=1)
+            if st.form_submit_button("Guardar Usuario"):
+                # Aquí podrías usar la tabla 'auth' de Supabase o una tabla propia
+                st.success(f"Usuario {new_u} creado (Simulado - Conecta con Supabase Auth si deseas real)")
+
+    with tab2:
+        st.write("Lista de accesos registrados:")
+        # Ejemplo de visualización
+        st.table([{"ID": 1, "User": "admin", "Rol": "Admin"}, {"ID": 2, "User": "cocina1", "Rol": "Staff"}])
 
 def admin_panel():
-    st.header("⚙️ Gestión del Maestro de Productos")
-    uploaded_file = st.file_uploader("Cargar Excel Maestro", type=["xlsx"])
-    
-    if uploaded_file:
-        df = pd.read_excel(uploaded_file)
-        st.write("Vista previa de carga:", df.head())
-        if st.button("Confirmar Carga Masiva"):
-            # El script original se define como el "original"
-            data = df.to_dict(orient='records')
-            supabase.table("productos_maestro").upsert(data).execute()
+    st.header("⚙️ Maestro de Productos")
+    file = st.file_uploader("Subir Excel", type=["xlsx"])
+    if file:
+        df = pd.read_excel(file)
+        if st.button("Cargar Datos"):
+            supabase.table("productos_maestro").upsert(df.to_dict(orient='records')).execute()
             st.success("Maestro actualizado.")
 
 if __name__ == "__main__":
