@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import re
 from supabase import create_client, Client
 
 # --- 1. CONEXIÓN ---
@@ -11,31 +12,27 @@ except:
     st.error("Error: Revisa los Secrets en Streamlit Cloud.")
     st.stop()
 
-# --- 2. DISEÑO VISUAL (CORRECCIÓN AGRESIVA DE BOTONES) ---
+# --- 2. DISEÑO VISUAL (CORRECCIÓN BOTONES) ---
 st.markdown("""
     <style>
     .stApp { background-color: #000000; color: #FFFFFF; }
     [data-testid="stSidebar"] { background-color: #111111; border-right: 1px solid #333; }
     .stMarkdown, p, label, .stMetric, span, .stHeader, .stTab { color: #FFFFFF !important; }
     
-    /* CORRECCIÓN BOTÓN BLANCO: Forzar texto negro visible */
+    /* BOTÓN BLANCO: Forzar texto negro visible */
     div.stButton > button {
         background-color: #FFFFFF !important;
         color: #000000 !important;
         font-weight: 800 !important;
         border: 2px solid #FFCC00 !important;
-        opacity: 1 !important;
     }
     
-    /* Selectbox e Inputs */
     .stSelectbox div[data-baseweb="select"] > div { background-color: #1A1A1A; color: white; border: 1px solid #FFCC00; }
     .stTextInput>div>div>input { background-color: #1A1A1A; color: white; border: 1px solid #333; }
 
-    /* BOTONES ROJOS (Borrar/Confirmar) */
     .red-btn > div > button {
         background-color: #DD0000 !important;
         color: #FFFFFF !important;
-        border: none !important;
     }
     
     h1, h2, h3 { color: #FFCC00 !important; }
@@ -51,27 +48,12 @@ def get_stock_actual(producto_id, local_id):
     res = supabase.table("movimientos_inventario").select("cantidad").eq("id_producto", producto_id).eq("id_local", local_id).execute().data
     return sum(item['cantidad'] for item in res) if res else 0
 
-# --- 4. PANTALLAS ---
+def extraer_valor_formato(formato_str):
+    """Extrae el número de un string como '750cc' o '1000gr'"""
+    match = re.search(r"(\d+)", str(formato_str))
+    return int(match.group(1)) if match else 1
 
-def login_screen():
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        try: st.image("Logo AE.jpg", width=250)
-        except: st.title("ALEMAN EXPERTO")
-        with st.form("Login"):
-            u = st.text_input("Usuario")
-            p = st.text_input("Contraseña", type="password")
-            if st.form_submit_button("INGRESAR"):
-                if u.lower() == "admin" and p == "654321.":
-                    st.session_state.auth_user = {"user": "Admin", "role": "Admin", "local": 1}
-                    st.rerun()
-                else:
-                    res = supabase.table("usuarios_sistema").select("*").eq("usuario", u).eq("clave", p).execute()
-                    if res.data:
-                        st.session_state.auth_user = {"user": u, "role": res.data[0]['rol'], "local": res.data[0]['id_local']}
-                        st.rerun()
-                    else:
-                        st.error("🚫 Credenciales incorrectas.")
+# --- 4. PANTALLAS ---
 
 def registro_pantalla(local_id):
     st.header("📥 Registro de Movimiento")
@@ -91,77 +73,32 @@ def registro_pantalla(local_id):
             ubi = st.selectbox("Ubicación:", ["Bodega", "Cámara de frío", "Producción", "Cocina"])
             tipo = st.radio("Operación:", ["ENTRADA", "SALIDA"])
         with col2:
-            peso = st.number_input("Cantidad:", min_value=0.0)
-            unid = st.selectbox("Unidad:", ["gramos", "cc", "Unitario", "kilos", "litros"])
+            cantidad_ingresada = st.number_input("Cantidad:", min_value=0.0)
+            unid = st.selectbox("Unidad:", ["Unitario", "gramos", "cc", "kilos", "litros"])
         
-        mult = 1000 if unid in ["kilos", "litros"] else 1
-        total_umb = peso * mult
+        # --- LÓGICA DE CONVERSIÓN CORREGIDA ---
+        # Si es Unitario, multiplicamos por el valor del formato (ej: 8 botellas * 750cc = 6000cc)
+        if unid == "Unitario":
+            factor_formato = extraer_valor_formato(p['formato_medida'])
+            total_unidades_minimas = cantidad_ingresada * factor_formato
+        else:
+            mult = 1000 if unid in ["kilos", "litros"] else 1
+            total_unidades_minimas = cantidad_ingresada * mult
 
-        st.markdown('<div class="red-btn">', unsafe_allow_html=True)
         if st.button("CONFIRMAR MOVIMIENTO"):
-            if tipo == "SALIDA" and total_umb > stock_disp:
-                st.error("❌ Stock Insuficiente.")
-            else:
-                valor = total_umb if tipo == "ENTRADA" else -total_umb
+            if tipo == "SALIDA" and total_unidades_minimas > stock_disp:
+                st.error(f"❌ Stock Insuficiente. Intentas sacar {total_unidades_minimas} {p['umb']} pero solo hay {stock_disp}.")
+            elif cantidad_ingresada > 0:
+                valor_final = total_unidades_minimas if tipo == "ENTRADA" else -total_unidades_minimas
                 supabase.table("movimientos_inventario").insert({
-                    "id_local": local_id, "id_producto": p['id'], "cantidad": valor, "tipo_movimiento": tipo, "ubicacion": ubi
+                    "id_local": local_id, 
+                    "id_producto": p['id'], 
+                    "cantidad": valor_final, 
+                    "tipo_movimiento": tipo, 
+                    "ubicacion": ubi
                 }).execute()
-                st.success("✅ Actualizado.")
+                st.success(f"✅ Registrado: {total_unidades_minimas} {p['umb']} agregados al stock.")
                 st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-
-def mantenedor_usuarios(locales_dict):
-    st.header("👤 Gestión de Usuarios")
-    t1, t2 = st.tabs(["Crear / Editar", "Borrar Usuario"])
-    
-    with t1:
-        with st.form("UserForm"):
-            n = st.text_input("Nombre y Apellido")
-            l_sel = st.selectbox("Local Asignado", list(locales_dict.keys()))
-            u = st.text_input("Usuario (Login)")
-            p = st.text_input("Clave")
-            r = st.selectbox("Rol", ["Staff", "Admin"])
-            if st.form_submit_button("GUARDAR / ACTUALIZAR"):
-                data = {"nombre_apellido": n, "id_local": locales_dict[l_sel], "usuario": u, "clave": p, "rol": r}
-                supabase.table("usuarios_sistema").upsert(data, on_conflict="usuario").execute()
-                st.success(f"Usuario {u} procesado.")
-
-    with t2:
-        res = supabase.table("usuarios_sistema").select("*").execute().data
-        if res:
-            df = pd.DataFrame(res)
-            st.dataframe(df[["nombre_apellido", "usuario", "rol"]], use_container_width=True)
-            user_to_del = st.selectbox("Seleccione usuario para eliminar:", df["usuario"])
-            st.markdown('<div class="red-btn">', unsafe_allow_html=True)
-            if st.button("ELIMINAR DEFINITIVAMENTE"):
-                supabase.table("usuarios_sistema").delete().eq("usuario", user_to_del).execute()
-                st.warning(f"Usuario {user_to_del} borrado.")
-                st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
-
-def admin_panel():
-    st.header("⚙️ Maestro de Productos")
-    
-    # 1. Carga Masiva
-    with st.expander("📥 Carga Masiva (Excel)"):
-        file = st.file_uploader("Subir .xlsx", type=["xlsx"])
-        if file and st.button("PROCESAR EXCEL"):
-            df = pd.read_excel(file)
-            supabase.table("productos_maestro").upsert(df.to_dict(orient='records')).execute()
-            st.success("Maestro actualizado.")
-
-    # 2. Edición Directa
-    st.subheader("📝 Edición Rápida de Productos")
-    res = supabase.table("productos_maestro").select("*").execute().data
-    if res:
-        df_prod = pd.DataFrame(res)
-        # st.data_editor permite editar celdas directamente
-        edited_df = st.data_editor(df_prod, num_rows="dynamic", key="prod_editor", use_container_width=True)
-        
-        if st.button("GUARDAR CAMBIOS EN TABLA"):
-            # Identificar filas cambiadas y actualizar
-            supabase.table("productos_maestro").upsert(edited_df.to_dict(orient='records')).execute()
-            st.success("Cambios guardados en la base de datos.")
 
 def reportes_pantalla(locales_dict):
     st.header("📊 Stock por Local")
@@ -176,10 +113,60 @@ def reportes_pantalla(locales_dict):
         df_stock.columns = ['Producto', 'Formato', 'UMB', 'Stock']
         st.dataframe(df_stock, use_container_width=True)
 
+def mantenedor_usuarios(locales_dict):
+    st.header("👤 Gestión de Usuarios")
+    t1, t2 = st.tabs(["Crear / Editar", "Borrar Usuario"])
+    with t1:
+        with st.form("UserForm"):
+            n = st.text_input("Nombre y Apellido")
+            l_sel = st.selectbox("Local Asignado", list(locales_dict.keys()))
+            u = st.text_input("Usuario")
+            p = st.text_input("Clave")
+            r = st.selectbox("Rol", ["Staff", "Admin"])
+            if st.form_submit_button("GUARDAR / ACTUALIZAR"):
+                supabase.table("usuarios_sistema").upsert({
+                    "nombre_apellido": n, "id_local": locales_dict[l_sel], "usuario": u, "clave": p, "rol": r
+                }, on_conflict="usuario").execute()
+                st.success("Usuario guardado.")
+    with t2:
+        res = supabase.table("usuarios_sistema").select("*").execute().data
+        if res:
+            df = pd.DataFrame(res)
+            user_del = st.selectbox("Eliminar a:", df["usuario"])
+            if st.button("ELIMINAR DEFINITIVAMENTE"):
+                supabase.table("usuarios_sistema").delete().eq("usuario", user_del).execute()
+                st.rerun()
+
+def admin_panel():
+    st.header("⚙️ Maestro de Productos")
+    res = supabase.table("productos_maestro").select("*").execute().data
+    if res:
+        df_prod = pd.DataFrame(res)
+        edited_df = st.data_editor(df_prod, num_rows="dynamic", use_container_width=True)
+        if st.button("GUARDAR CAMBIOS"):
+            supabase.table("productos_maestro").upsert(edited_df.to_dict(orient='records')).execute()
+            st.success("Base de datos actualizada.")
+
 # --- 5. MAIN ---
 def main():
     if 'auth_user' not in st.session_state:
-        login_screen()
+        # Lógica de Login simplificada
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.image("Logo AE.jpg", width=250)
+            with st.form("Login"):
+                u = st.text_input("Usuario")
+                p = st.text_input("Contraseña", type="password")
+                if st.form_submit_button("INGRESAR"):
+                    if u.lower() == "admin" and p == "654321.":
+                        st.session_state.auth_user = {"user": "Admin", "role": "Admin", "local": 1}
+                        st.rerun()
+                    else:
+                        res = supabase.table("usuarios_sistema").select("*").eq("usuario", u).eq("clave", p).execute()
+                        if res.data:
+                            st.session_state.auth_user = {"user": u, "role": res.data[0]['rol'], "local": res.data[0]['id_local']}
+                            st.rerun()
+                        else: st.error("Credenciales incorrectas.")
         return
 
     user = st.session_state.auth_user
@@ -188,17 +175,15 @@ def main():
 
     st.sidebar.image("Logo AE.jpg", use_container_width=True)
     if user['role'] == "Admin":
-        st.sidebar.subheader("🛠️ Administrador")
         current_name = locales_inv.get(user['local'], list(locales_dict.keys())[0])
         nuevo_local = st.sidebar.selectbox("Local Activo:", list(locales_dict.keys()), index=list(locales_dict.keys()).index(current_name))
         user['local'] = locales_dict[nuevo_local]
 
-    st.sidebar.markdown(f"**Usuario:** {user['user']}")
-    st.sidebar.markdown(f"**Sede:** {locales_inv.get(user['local'])}")
+    st.sidebar.markdown(f"**Usuario:** {user['user']} | **Sede:** {locales_inv.get(user['local'])}")
     
     menu = ["📥 Registro Movimiento", "📊 Reportes"]
     if user['role'] == "Admin": menu.extend(["👤 Mantenedor Usuarios", "⚙️ Maestro Productos"])
-    choice = st.sidebar.radio("Menú", menu)
+    choice = st.sidebar.radio("Navegación", menu)
 
     if st.sidebar.button("Cerrar Sesión"):
         del st.session_state.auth_user
