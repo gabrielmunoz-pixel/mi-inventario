@@ -11,53 +11,60 @@ except:
     st.error("Error: Revisa los Secrets en Streamlit Cloud.")
     st.stop()
 
-# --- ESTILO VISUAL NEGRO Y BLANCO ---
+# --- ESTILO VISUAL "ALEMAN EXPERTO" ---
 st.markdown("""
     <style>
     .stApp { background-color: #000000; color: #FFFFFF; }
     [data-testid="stSidebar"] { background-color: #111111; border-right: 1px solid #333; }
     .stMarkdown, p, label, .stMetric, span { color: #FFFFFF !important; }
+    
+    /* Input y Selectbox */
     .stSelectbox div[data-baseweb="select"] > div { background-color: #222222; color: white; border: 1px solid #FFCC00; }
-    .stButton>button { background-color: #DD0000; color: white; border-radius: 5px; width: 100%; font-weight: bold; }
+    .stTextInput>div>div>input { background-color: #222222; color: white; border: 1px solid #333; }
+    
+    /* BOTÓN LOGIN: Fondo blanco, letras negras como pediste */
+    .login-btn > div > button {
+        background-color: #FFFFFF !important;
+        color: #000000 !important;
+        font-weight: bold !important;
+        border: none !important;
+    }
+
+    /* BOTONES GENERALES (Rojos) */
+    .stButton>button { background-color: #DD0000; color: white; border-radius: 5px; font-weight: bold; }
+    
     h1, h2, h3 { color: #FFCC00 !important; }
     </style>
     """, unsafe_allow_html=True)
 
 def main():
-    # Inicialización de sesión si no existe
     if 'auth_user' not in st.session_state:
         login_screen()
         return
 
     user = st.session_state.auth_user
-    
-    # BARRA LATERAL CON LOGO
     try:
         st.sidebar.image("Logo AE.jpg", use_container_width=True)
     except:
-        st.sidebar.title("🇩🇪 ALEMAN EXPERTO")
+        st.sidebar.title("🇩🇪 AE")
         
-    st.sidebar.markdown(f"**Usuario:** {user['user']}")
-    st.sidebar.markdown(f"**Nivel de Acceso:** {user['role']}")
+    st.sidebar.markdown(f"**Usuario:** {user['user']} | **Rol:** {user['role']}")
     
-    # --- LÓGICA DE MENÚ ESTRICTA ---
-    # Si el rol es 'Admin', mostramos todas las opciones
     options = ["📥 Registro Movimiento", "📊 Reportes"]
     if user['role'] == "Admin":
-        options.append("👤 Mantenedor Usuarios")
-        options.append("⚙️ Maestro Productos")
+        options.extend(["👤 Mantenedor Usuarios", "⚙️ Maestro Productos"])
     
     choice = st.sidebar.radio("Navegación", options)
 
-    if st.sidebar.button("Log out"):
+    if st.sidebar.button("Cerrar Sesión"):
         del st.session_state.auth_user
         st.rerun()
 
-    # --- ENRUTAMIENTO ---
+    # ENRUTAMIENTO
     if choice == "📥 Registro Movimiento":
         registro_pantalla(user['local'])
     elif choice == "📊 Reportes":
-        reportes_pantalla()
+        st.header("📊 Reportes en desarrollo")
     elif choice == "👤 Mantenedor Usuarios":
         mantenedor_usuarios()
     elif choice == "⚙️ Maestro Productos":
@@ -66,47 +73,103 @@ def main():
 def login_screen():
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.title("🔐 Acceso")
+        st.image("Logo AE.jpg", width=250) if "Logo" else st.title("ALEMAN EXPERTO")
         with st.form("Login"):
             u = st.text_input("Usuario")
             p = st.text_input("Contraseña", type="password")
-            if st.form_submit_button("INGRESAR"):
-                # VALIDACIÓN: Admin (independiente de mayúsculas)
+            # Usamos un div para aplicar el estilo de botón blanco
+            st.markdown('<div class="login-btn">', unsafe_allow_html=True)
+            submitted = st.form_submit_button("INGRESAR")
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            if submitted:
                 if u.lower() == "admin" and p == "654321.":
                     st.session_state.auth_user = {"user": "Admin", "role": "Admin", "local": 1}
-                    st.success("¡Bienvenido Administrador!")
-                    st.rerun()
-                elif u != "" and p != "":
-                    st.session_state.auth_user = {"user": u, "role": "Staff", "local": 1}
                     st.rerun()
                 else:
-                    st.error("Credenciales inválidas")
+                    # Buscar en tabla usuarios_sistema
+                    res = supabase.table("usuarios_sistema").select("*").eq("usuario", u).eq("clave", p).execute()
+                    if res.data:
+                        st.session_state.auth_user = {"user": u, "role": res.data[0]['rol'], "local": res.data[0]['id_local']}
+                        st.rerun()
+                    else:
+                        st.error("Credenciales incorrectas")
 
 def registro_pantalla(local_id):
-    st.header("📥 Movimientos de Inventario")
-    # (El resto del código de registro que ya teníamos)
-    st.info("Aquí el personal registra entradas y salidas.")
+    st.header("📥 Registro de Movimiento")
+    
+    # Restauramos la búsqueda de productos
+    res = supabase.table("productos_maestro").select("*").execute().data
+    if not res:
+        st.warning("Carga productos en el Maestro primero.")
+        return
 
-def reportes_pantalla():
-    st.header("📊 Reportes de Stock")
-    st.write("Visualización consolidada por local y ubicación.")
+    prod_map = {f"{p['nombre']} | {p['formato_medida']}": p for p in res}
+    seleccion = st.selectbox("Buscar y Seleccionar Producto:", [""] + list(prod_map.keys()))
+    
+    if seleccion:
+        p = prod_map[seleccion]
+        st.info(f"Unidad Base: {p['umb']} | Factor: {p['factor_conversion']}")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            ubicacion = st.selectbox("Ubicación:", ["Bodega", "Cámara de frío", "Producción", "Cocina"])
+            tipo = st.radio("Operación:", ["ENTRADA", "SALIDA"])
+        with col2:
+            peso = st.number_input("Peso/Cant. recibida:", min_value=0.0)
+            unid = st.selectbox("Unidad:", ["gramos", "kilos", "litros", "cc"])
+        
+        # Conversión automática
+        mult = 1000 if unid in ["kilos", "litros"] else 1
+        total_umb = peso * mult
+
+        if st.button("GUARDAR MOVIMIENTO"):
+            ajuste = total_umb if tipo == "ENTRADA" else -total_umb
+            supabase.table("movimientos_inventario").insert({
+                "id_local": local_id, "id_producto": p['id'], "cantidad": total_umb, 
+                "tipo_movimiento": tipo, "ubicacion": ubicacion, "peso_verificado": peso, "unidad_peso_verificado": unid
+            }).execute()
+            st.success(f"✅ Guardado: {total_umb} {p['umb']} en {ubicacion}")
 
 def mantenedor_usuarios():
     st.header("👤 Gestión de Usuarios")
-    st.write("Cree y gestione los accesos del personal.")
-    # Implementaremos la creación real aquí
+    
+    tab1, tab2 = st.tabs(["➕ Crear / Modificar", "📋 Lista de Usuarios"])
+    
+    with tab1:
+        with st.form("form_usuario"):
+            nom = st.text_input("Nombre y Apellido")
+            mail = st.text_input("Correo")
+            loc = st.number_input("ID Local", min_value=1, step=1)
+            usr = st.text_input("Nombre de Usuario (Login)")
+            pwd = st.text_input("Clave", type="password")
+            rol = st.selectbox("Rol", ["Staff", "Admin"])
+            if st.form_submit_button("GUARDAR USUARIO"):
+                data = {"nombre_apellido": nom, "correo": mail, "id_local": loc, "usuario": usr, "clave": pwd, "rol": rol}
+                supabase.table("usuarios_sistema").upsert(data, on_conflict="usuario").execute()
+                st.success(f"Usuario {usr} actualizado con éxito.")
+
+    with tab2:
+        usuarios = supabase.table("usuarios_sistema").select("*").execute().data
+        if usuarios:
+            df_usr = pd.DataFrame(usuarios)
+            st.dataframe(df_usr[["nombre_apellido", "usuario", "rol", "id_local", "correo"]], use_container_width=True)
+            
+            user_del = st.selectbox("Seleccionar usuario para borrar", [u['usuario'] for u in usuarios])
+            if st.button("BORRAR SELECCIONADO"):
+                supabase.table("usuarios_sistema").delete().eq("usuario", user_del).execute()
+                st.warning(f"Usuario {user_del} eliminado.")
+                st.rerun()
 
 def admin_panel():
     st.header("⚙️ Maestro de Productos")
-    st.info("Carga el archivo Excel para actualizar la lista de productos.")
-    file = st.file_uploader("Subir Maestro (.xlsx)", type=["xlsx"])
+    file = st.file_uploader("Subir Excel (.xlsx)", type=["xlsx"])
     if file:
         df = pd.read_excel(file)
         st.dataframe(df.head())
-        if st.button("Actualizar Base de Datos"):
-            data = df.to_dict(orient='records')
-            supabase.table("productos_maestro").upsert(data).execute()
-            st.success("Maestro actualizado.")
+        if st.button("PROCESAR CARGA"):
+            supabase.table("productos_maestro").upsert(df.to_dict(orient='records')).execute()
+            st.success("Base de datos de productos actualizada.")
 
 if __name__ == "__main__":
     main()
