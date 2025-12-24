@@ -19,7 +19,7 @@ st.markdown("""
     [data-testid="stSidebar"] { background-color: #111111; border-right: 1px solid #333; }
     .stMarkdown, p, label, .stMetric, span, .stHeader, .stTab { color: #FFFFFF !important; }
     
-    /* BOTÓN BLANCO: Forzar texto negro visible */
+    /* BOTÓN BLANCO: Texto negro y grueso */
     div.stButton > button {
         background-color: #FFFFFF !important;
         color: #000000 !important;
@@ -45,10 +45,12 @@ def get_locales_map():
     return {l['nombre']: l['id'] for l in res} if res else {}
 
 def get_stock_actual(producto_id, local_id):
+    """Obtiene el stock neto acumulado en la base de datos"""
     res = supabase.table("movimientos_inventario").select("cantidad").eq("id_producto", producto_id).eq("id_local", local_id).execute().data
     return sum(item['cantidad'] for item in res) if res else 0
 
 def extraer_valor_formato(formato_str):
+    """Extrae el número de un string (ej: '750cc' -> 750)"""
     match = re.search(r"(\d+)", str(formato_str))
     return int(match.group(1)) if match else 1
 
@@ -64,9 +66,12 @@ def registro_pantalla(local_id):
     
     if seleccion:
         p = prod_map[seleccion]
-        # CORRECCIÓN: Cálculo de existencia actual real en UMB
-        stock_umb = get_stock_actual(p['id'], local_id)
-        st.info(f"Existencia actual: {stock_umb} {p['umb']}")
+        # Mostrar existencia en unidades físicas (botellas/unidades)
+        stock_total_minimo = get_stock_actual(p['id'], local_id)
+        factor = extraer_valor_formato(p['formato_medida'])
+        stock_fisico = stock_total_minimo / factor if factor > 0 else 0
+        
+        st.info(f"Existencia actual: {stock_fisico} Unidades ({stock_total_minimo} {p['umb']})")
         
         col1, col2 = st.columns(2)
         with col1:
@@ -76,17 +81,16 @@ def registro_pantalla(local_id):
             cantidad_ingresada = st.number_input("Cantidad:", min_value=0.0)
             unid = st.selectbox("Unidad:", ["Unitario", "gramos", "cc", "kilos", "litros"])
         
-        # Conversión lógica
-        factor_formato = extraer_valor_formato(p['formato_medida'])
+        # Lógica de conversión para guardar en la BD
         if unid == "Unitario":
-            total_unidades_minimas = cantidad_ingresada * factor_formato
+            total_unidades_minimas = cantidad_ingresada * factor
         else:
             mult = 1000 if unid in ["kilos", "litros"] else 1
             total_unidades_minimas = cantidad_ingresada * mult
 
         if st.button("CONFIRMAR MOVIMIENTO"):
-            if tipo == "SALIDA" and total_unidades_minimas > stock_umb:
-                st.error(f"❌ Stock Insuficiente. Solo hay {stock_umb} {p['umb']} disponibles.")
+            if tipo == "SALIDA" and total_unidades_minimas > stock_total_minimo:
+                st.error(f"❌ Stock insuficiente.")
             elif cantidad_ingresada > 0:
                 valor_final = total_unidades_minimas if tipo == "ENTRADA" else -total_unidades_minimas
                 supabase.table("movimientos_inventario").insert({
@@ -104,18 +108,20 @@ def reportes_pantalla(locales_dict):
     data = query.execute().data
     if data:
         df = pd.json_normalize(data)
-        # Agrupación y cálculo de columnas solicitadas
         df_stock = df.groupby(['productos_maestro.nombre', 'productos_maestro.formato_medida', 'productos_maestro.umb']).agg({'cantidad': 'sum'}).reset_index()
         
-        # Cálculo de la columna Stock (en unidades físicas/botellas)
+        # LÓGICA SOLICITADA:
+        # Stock = Unidades físicas (ej: 8 botellas)
+        # StockUMB = Cálculo total (ej: 6000 cc)
         df_stock['factor'] = df_stock['productos_maestro.formato_medida'].apply(extraer_valor_formato)
         df_stock['Stock'] = df_stock['cantidad'] / df_stock['factor']
+        df_stock['StockUMB'] = df_stock['Stock'] * df_stock['factor']
         
-        # Renombrar y seleccionar columnas: Producto/Formato/Stock/UMB/StockUMB
-        df_stock = df_stock[['productos_maestro.nombre', 'productos_maestro.formato_medida', 'Stock', 'productos_maestro.umb', 'cantidad']]
-        df_stock.columns = ['Producto', 'Formato', 'Stock', 'UMB', 'StockUMB']
+        # Selección de columnas finales
+        df_final = df_stock[['productos_maestro.nombre', 'productos_maestro.formato_medida', 'Stock', 'productos_maestro.umb', 'StockUMB']]
+        df_final.columns = ['Producto', 'Formato', 'Stock', 'UMB', 'StockUMB']
         
-        st.dataframe(df_stock, use_container_width=True)
+        st.dataframe(df_final, use_container_width=True)
 
 def mantenedor_usuarios(locales_dict):
     st.header("👤 Gestión de Usuarios")
@@ -149,7 +155,7 @@ def admin_panel():
         edited_df = st.data_editor(df_prod, num_rows="dynamic", use_container_width=True)
         if st.button("GUARDAR CAMBIOS"):
             supabase.table("productos_maestro").upsert(edited_df.to_dict(orient='records')).execute()
-            st.success("Cambios guardados.")
+            st.success("Base de datos actualizada.")
 
 def main():
     if 'auth_user' not in st.session_state:
