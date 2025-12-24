@@ -45,12 +45,10 @@ def get_locales_map():
     return {l['nombre']: l['id'] for l in res} if res else {}
 
 def get_stock_actual(producto_id, local_id):
-    """Obtiene el stock neto acumulado en la base de datos"""
     res = supabase.table("movimientos_inventario").select("cantidad").eq("id_producto", producto_id).eq("id_local", local_id).execute().data
     return sum(item['cantidad'] for item in res) if res else 0
 
 def extraer_valor_formato(formato_str):
-    """Extrae el número de un string (ej: '750cc' -> 750)"""
     match = re.search(r"(\d+)", str(formato_str))
     return int(match.group(1)) if match else 1
 
@@ -66,12 +64,12 @@ def registro_pantalla(local_id):
     
     if seleccion:
         p = prod_map[seleccion]
-        # Mostrar existencia en unidades físicas (botellas/unidades)
         stock_total_minimo = get_stock_actual(p['id'], local_id)
         factor = extraer_valor_formato(p['formato_medida'])
-        stock_fisico = stock_total_minimo / factor if factor > 0 else 0
         
-        st.info(f"Existencia actual: {stock_fisico} Unidades ({stock_total_minimo} {p['umb']})")
+        # CORRECCIÓN DE DECIMALES (Rounding)
+        stock_fisico = round(stock_total_minimo / factor, 2) if factor > 0 else 0
+        st.info(f"Existencia actual: {stock_fisico} Unidades ({round(float(stock_total_minimo), 2)} {p['umb']})")
         
         col1, col2 = st.columns(2)
         with col1:
@@ -81,7 +79,6 @@ def registro_pantalla(local_id):
             cantidad_ingresada = st.number_input("Cantidad:", min_value=0.0)
             unid = st.selectbox("Unidad:", ["Unitario", "gramos", "cc", "kilos", "litros"])
         
-        # Lógica de conversión para guardar en la BD
         if unid == "Unitario":
             total_unidades_minimas = cantidad_ingresada * factor
         else:
@@ -96,8 +93,11 @@ def registro_pantalla(local_id):
                 supabase.table("movimientos_inventario").insert({
                     "id_local": local_id, "id_producto": p['id'], "cantidad": valor_final, "tipo_movimiento": tipo, "ubicacion": ubi
                 }).execute()
-                st.success("✅ Inventario actualizado.")
-                st.rerun()
+                
+                # AVISO DE ÉXITO DETALLADO
+                nuevo_total = stock_total_minimo + valor_final
+                st.success(f"✅ ¡Registro Exitoso! \n\n Movimiento: {tipo} de {cantidad_ingresada} {unid} de {p['nombre']}. \n\n Nuevo Stock: {round(nuevo_total/factor, 2)} Unidades.")
+                # st.rerun() # Se comenta para que el usuario pueda ver el mensaje verde antes de que se limpie la pantalla
 
 def reportes_pantalla(locales_dict):
     st.header("📊 Reportes de Inventario")
@@ -110,14 +110,10 @@ def reportes_pantalla(locales_dict):
         df = pd.json_normalize(data)
         df_stock = df.groupby(['productos_maestro.nombre', 'productos_maestro.formato_medida', 'productos_maestro.umb']).agg({'cantidad': 'sum'}).reset_index()
         
-        # LÓGICA SOLICITADA:
-        # Stock = Unidades físicas (ej: 8 botellas)
-        # StockUMB = Cálculo total (ej: 6000 cc)
         df_stock['factor'] = df_stock['productos_maestro.formato_medida'].apply(extraer_valor_formato)
-        df_stock['Stock'] = df_stock['cantidad'] / df_stock['factor']
-        df_stock['StockUMB'] = df_stock['Stock'] * df_stock['factor']
+        df_stock['Stock'] = (df_stock['cantidad'] / df_stock['factor']).round(2)
+        df_stock['StockUMB'] = df_stock['cantidad'].round(2)
         
-        # Selección de columnas finales
         df_final = df_stock[['productos_maestro.nombre', 'productos_maestro.formato_medida', 'Stock', 'productos_maestro.umb', 'StockUMB']]
         df_final.columns = ['Producto', 'Formato', 'Stock', 'UMB', 'StockUMB']
         
@@ -137,15 +133,17 @@ def mantenedor_usuarios(locales_dict):
                 supabase.table("usuarios_sistema").upsert({
                     "nombre_apellido": n, "id_local": locales_dict[l_sel], "usuario": u, "clave": p, "rol": r
                 }, on_conflict="usuario").execute()
-                st.success("Usuario procesado.")
+                st.success("Usuario procesado correctamente.")
     with t2:
         res = supabase.table("usuarios_sistema").select("*").execute().data
         if res:
             df = pd.DataFrame(res)
             user_del = st.selectbox("Eliminar a:", df["usuario"])
+            st.markdown('<div class="red-btn">', unsafe_allow_html=True)
             if st.button("ELIMINAR DEFINITIVAMENTE"):
                 supabase.table("usuarios_sistema").delete().eq("usuario", user_del).execute()
                 st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
 def admin_panel():
     st.header("⚙️ Maestro de Productos")
@@ -155,7 +153,7 @@ def admin_panel():
         edited_df = st.data_editor(df_prod, num_rows="dynamic", use_container_width=True)
         if st.button("GUARDAR CAMBIOS"):
             supabase.table("productos_maestro").upsert(edited_df.to_dict(orient='records')).execute()
-            st.success("Base de datos actualizada.")
+            st.success("Base de datos actualizada con éxito.")
 
 def main():
     if 'auth_user' not in st.session_state:
