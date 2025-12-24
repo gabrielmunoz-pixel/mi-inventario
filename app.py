@@ -56,18 +56,28 @@ def extraer_valor_formato(formato_str):
 
 def registro_pantalla(local_id):
     st.header("📥 Registro de Movimiento")
+    
+    # Obtener productos
     res = supabase.table("productos_maestro").select("*").execute().data
     if not res: return
 
     prod_map = {f"{p['nombre']} | {p['formato_medida']}": p for p in res}
-    seleccion = st.selectbox("Buscar Producto:", [""] + list(prod_map.keys()))
+    
+    # 1ra MODIFICACIÓN: Mejorar búsqueda en celulares (teclado automático)
+    # Se usa placeholder para incentivar el toque y la búsqueda
+    seleccion = st.selectbox(
+        "Buscar Producto:", 
+        options=[""] + list(prod_map.keys()),
+        index=0,
+        placeholder="Toca aquí para escribir...",
+        help="Al tocar aquí se activará el teclado de tu celular para buscar."
+    )
     
     if seleccion:
         p = prod_map[seleccion]
         stock_total_minimo = get_stock_actual(p['id'], local_id)
         factor = extraer_valor_formato(p['formato_medida'])
         
-        # CORRECCIÓN DE DECIMALES (Rounding)
         stock_fisico = round(stock_total_minimo / factor, 2) if factor > 0 else 0
         st.info(f"Existencia actual: {stock_fisico} Unidades ({round(float(stock_total_minimo), 2)} {p['umb']})")
         
@@ -76,9 +86,10 @@ def registro_pantalla(local_id):
             ubi = st.selectbox("Ubicación:", ["Bodega", "Cámara de frío", "Producción", "Cocina"])
             tipo = st.radio("Operación:", ["ENTRADA", "SALIDA"])
         with col2:
-            cantidad_ingresada = st.number_input("Cantidad:", min_value=0.0)
+            cantidad_ingresada = st.number_input("Cantidad:", min_value=0.0, step=1.0)
             unid = st.selectbox("Unidad:", ["Unitario", "gramos", "cc", "kilos", "litros"])
         
+        # Conversión lógica
         if unid == "Unitario":
             total_unidades_minimas = cantidad_ingresada * factor
         else:
@@ -90,14 +101,29 @@ def registro_pantalla(local_id):
                 st.error(f"❌ Stock insuficiente.")
             elif cantidad_ingresada > 0:
                 valor_final = total_unidades_minimas if tipo == "ENTRADA" else -total_unidades_minimas
+                
+                # Guardar en BD
                 supabase.table("movimientos_inventario").insert({
-                    "id_local": local_id, "id_producto": p['id'], "cantidad": valor_final, "tipo_movimiento": tipo, "ubicacion": ubi
+                    "id_local": local_id, 
+                    "id_producto": p['id'], 
+                    "cantidad": valor_final, 
+                    "tipo_movimiento": tipo, 
+                    "ubicacion": ubi
                 }).execute()
                 
-                # AVISO DE ÉXITO DETALLADO
-                nuevo_total = stock_total_minimo + valor_final
-                st.success(f"✅ ¡Registro Exitoso! \n\n Movimiento: {tipo} de {cantidad_ingresada} {unid} de {p['nombre']}. \n\n Nuevo Stock: {round(nuevo_total/factor, 2)} Unidades.")
-                # st.rerun() # Se comenta para que el usuario pueda ver el mensaje verde antes de que se limpie la pantalla
+                # 2da MODIFICACIÓN: Actualización de Stock y mensaje de éxito
+                nuevo_total_umb = stock_total_minimo + valor_final
+                nuevo_stock_fisico = round(nuevo_total_umb / factor, 2)
+                
+                st.success(f"""
+                ✅ **¡Registro Exitoso!**
+                * **Producto:** {p['nombre']}
+                * **Movimiento:** {tipo} de {cantidad_ingresada} {unid}
+                * **Stock Actualizado:** {nuevo_stock_fisico} Unidades ({round(nuevo_total_umb, 2)} {p['umb']})
+                """)
+                
+                # Nota: No usamos st.rerun() inmediato para que el usuario vea el cambio en el mensaje.
+                # El stock se actualizará en la barra azul (st.info) en la siguiente interacción o recarga.
 
 def reportes_pantalla(locales_dict):
     st.header("📊 Reportes de Inventario")
