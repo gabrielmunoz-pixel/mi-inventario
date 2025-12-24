@@ -12,7 +12,7 @@ except:
     st.error("Error: Revisa los Secrets en Streamlit Cloud.")
     st.stop()
 
-# --- 2. DISEÑO VISUAL (CORRECCIÓN BOTONES) ---
+# --- 2. DISEÑO VISUAL ---
 st.markdown("""
     <style>
     .stApp { background-color: #000000; color: #FFFFFF; }
@@ -49,7 +49,6 @@ def get_stock_actual(producto_id, local_id):
     return sum(item['cantidad'] for item in res) if res else 0
 
 def extraer_valor_formato(formato_str):
-    """Extrae el número de un string como '750cc' o '1000gr'"""
     match = re.search(r"(\d+)", str(formato_str))
     return int(match.group(1)) if match else 1
 
@@ -65,8 +64,9 @@ def registro_pantalla(local_id):
     
     if seleccion:
         p = prod_map[seleccion]
-        stock_disp = get_stock_actual(p['id'], local_id)
-        st.info(f"Existencia actual: {stock_disp} {p['umb']}")
+        # CORRECCIÓN: Cálculo de existencia actual real en UMB
+        stock_umb = get_stock_actual(p['id'], local_id)
+        st.info(f"Existencia actual: {stock_umb} {p['umb']}")
         
         col1, col2 = st.columns(2)
         with col1:
@@ -76,32 +76,27 @@ def registro_pantalla(local_id):
             cantidad_ingresada = st.number_input("Cantidad:", min_value=0.0)
             unid = st.selectbox("Unidad:", ["Unitario", "gramos", "cc", "kilos", "litros"])
         
-        # --- LÓGICA DE CONVERSIÓN CORREGIDA ---
-        # Si es Unitario, multiplicamos por el valor del formato (ej: 8 botellas * 750cc = 6000cc)
+        # Conversión lógica
+        factor_formato = extraer_valor_formato(p['formato_medida'])
         if unid == "Unitario":
-            factor_formato = extraer_valor_formato(p['formato_medida'])
             total_unidades_minimas = cantidad_ingresada * factor_formato
         else:
             mult = 1000 if unid in ["kilos", "litros"] else 1
             total_unidades_minimas = cantidad_ingresada * mult
 
         if st.button("CONFIRMAR MOVIMIENTO"):
-            if tipo == "SALIDA" and total_unidades_minimas > stock_disp:
-                st.error(f"❌ Stock Insuficiente. Intentas sacar {total_unidades_minimas} {p['umb']} pero solo hay {stock_disp}.")
+            if tipo == "SALIDA" and total_unidades_minimas > stock_umb:
+                st.error(f"❌ Stock Insuficiente. Solo hay {stock_umb} {p['umb']} disponibles.")
             elif cantidad_ingresada > 0:
                 valor_final = total_unidades_minimas if tipo == "ENTRADA" else -total_unidades_minimas
                 supabase.table("movimientos_inventario").insert({
-                    "id_local": local_id, 
-                    "id_producto": p['id'], 
-                    "cantidad": valor_final, 
-                    "tipo_movimiento": tipo, 
-                    "ubicacion": ubi
+                    "id_local": local_id, "id_producto": p['id'], "cantidad": valor_final, "tipo_movimiento": tipo, "ubicacion": ubi
                 }).execute()
-                st.success(f"✅ Registrado: {total_unidades_minimas} {p['umb']} agregados al stock.")
+                st.success("✅ Inventario actualizado.")
                 st.rerun()
 
 def reportes_pantalla(locales_dict):
-    st.header("📊 Stock por Local")
+    st.header("📊 Reportes de Inventario")
     filtro = st.selectbox("Sede:", ["Todos"] + list(locales_dict.keys()))
     query = supabase.table("movimientos_inventario").select("cantidad, id_local, productos_maestro(nombre, formato_medida, umb)")
     if filtro != "Todos": query = query.eq("id_local", locales_dict[filtro])
@@ -109,8 +104,17 @@ def reportes_pantalla(locales_dict):
     data = query.execute().data
     if data:
         df = pd.json_normalize(data)
+        # Agrupación y cálculo de columnas solicitadas
         df_stock = df.groupby(['productos_maestro.nombre', 'productos_maestro.formato_medida', 'productos_maestro.umb']).agg({'cantidad': 'sum'}).reset_index()
-        df_stock.columns = ['Producto', 'Formato', 'UMB', 'Stock']
+        
+        # Cálculo de la columna Stock (en unidades físicas/botellas)
+        df_stock['factor'] = df_stock['productos_maestro.formato_medida'].apply(extraer_valor_formato)
+        df_stock['Stock'] = df_stock['cantidad'] / df_stock['factor']
+        
+        # Renombrar y seleccionar columnas: Producto/Formato/Stock/UMB/StockUMB
+        df_stock = df_stock[['productos_maestro.nombre', 'productos_maestro.formato_medida', 'Stock', 'productos_maestro.umb', 'cantidad']]
+        df_stock.columns = ['Producto', 'Formato', 'Stock', 'UMB', 'StockUMB']
+        
         st.dataframe(df_stock, use_container_width=True)
 
 def mantenedor_usuarios(locales_dict):
@@ -127,7 +131,7 @@ def mantenedor_usuarios(locales_dict):
                 supabase.table("usuarios_sistema").upsert({
                     "nombre_apellido": n, "id_local": locales_dict[l_sel], "usuario": u, "clave": p, "rol": r
                 }, on_conflict="usuario").execute()
-                st.success("Usuario guardado.")
+                st.success("Usuario procesado.")
     with t2:
         res = supabase.table("usuarios_sistema").select("*").execute().data
         if res:
@@ -145,12 +149,10 @@ def admin_panel():
         edited_df = st.data_editor(df_prod, num_rows="dynamic", use_container_width=True)
         if st.button("GUARDAR CAMBIOS"):
             supabase.table("productos_maestro").upsert(edited_df.to_dict(orient='records')).execute()
-            st.success("Base de datos actualizada.")
+            st.success("Cambios guardados.")
 
-# --- 5. MAIN ---
 def main():
     if 'auth_user' not in st.session_state:
-        # Lógica de Login simplificada
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             st.image("Logo AE.jpg", width=250)
@@ -180,7 +182,6 @@ def main():
         user['local'] = locales_dict[nuevo_local]
 
     st.sidebar.markdown(f"**Usuario:** {user['user']} | **Sede:** {locales_inv.get(user['local'])}")
-    
     menu = ["📥 Registro Movimiento", "📊 Reportes"]
     if user['role'] == "Admin": menu.extend(["👤 Mantenedor Usuarios", "⚙️ Maestro Productos"])
     choice = st.sidebar.radio("Navegación", menu)
