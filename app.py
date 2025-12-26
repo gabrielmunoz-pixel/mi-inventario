@@ -33,39 +33,45 @@ def logout():
     st.query_params.clear()
     st.rerun()
 
-# --- 3. DISEÑO VISUAL (CORRECCIÓN DE TEXTO EN LISTA DESPLEGABLE) ---
+# --- 3. DISEÑO VISUAL (CORRECCIÓN QUIRÚRGICA DE CONTRASTE) ---
 st.markdown(f"""
     <style>
     /* Fondo General y Textos Base en Blanco */
     .stApp {{ background-color: #000000; color: #FFFFFF !important; }}
     [data-testid="stSidebar"] {{ background-color: #111111; border-right: 1px solid #333; }}
     
-    .stMarkdown, p, label, .stMetric, span, .stHeader, .stTab, li, h1, h2, h3 {{ 
+    /* TODO EL TEXTO DE LA PÁGINA EN BLANCO (Etiquetas, mensajes, títulos) */
+    .stMarkdown, p, label, .stMetric, span, .stHeader, .stTab, li, h1, h2, h3, .stWarning, .stInfo, .stExpander p {{ 
         color: #FFFFFF !important; 
     }}
 
-    /* BARRA DE BÚSQUEDA (INPUT) */
-    .stTextInput>div>div>input {{ background-color: #FFFFFF !important; color: #000000 !important; }}
-    
-    /* --- CORRECCIÓN DEFINITIVA PARA LA LISTA DE PRODUCTOS --- */
-    /* Forzar texto negro en el contenedor del selectbox y todas las opciones de la lista */
-    div[data-baseweb="select"] div, 
-    div[data-baseweb="select"] span, 
-    li[role="option"], 
-    div[role="option"],
-    div[data-testid="stMarkdownContainer"] p {{
-        color: #000000 !important;
-    }}
-    
-    /* Asegurar que el fondo del menú desplegable sea blanco */
-    div[data-baseweb="select"] > div, 
-    ul[role="listbox"], 
-    div[role="listbox"] {{
-        background-color: #FFFFFF !important;
+    /* FORZAR BLANCO ESPECÍFICO PARA LABELS DE INPUTS (Nombre, Usuario, Buscar producto, etc) */
+    div[data-testid="stWidgetLabel"] p {{
+        color: #FFFFFF !important;
     }}
 
-    /* Re-forzar blanco solo para los textos que SÍ deben ser blancos (títulos y etiquetas fuera de inputs) */
-    [data-testid="stHeader"] h1, .stHeader, label p {{ color: #FFFFFF !important; }}
+    /* --- TEXTO NEGRO ÚNICAMENTE DENTRO DE LOS CAMPOS BLANCOS --- */
+    /* 1. Input de búsqueda */
+    .stTextInput>div>div>input {{ 
+        background-color: #FFFFFF !important; 
+        color: #000000 !important; 
+    }}
+    
+    /* 2. Caja de Selección (Selectbox) - El valor seleccionado */
+    div[data-baseweb="select"] > div {{ 
+        background-color: #FFFFFF !important; 
+    }}
+    div[data-baseweb="select"] div[data-testid="stMarkdownContainer"] p,
+    div[data-baseweb="select"] span {{
+        color: #000000 !important;
+    }}
+
+    /* 3. Lista de opciones del desplegable (Menú cascada) */
+    ul[role="listbox"] li, 
+    div[role="option"] p,
+    div[role="option"] span {{
+        color: #000000 !important;
+    }}
 
     /* Notificaciones (Toasts) */
     [data-testid="stToast"] {{ background-color: #FFCC00 !important; border: 1px solid #000000 !important; }}
@@ -165,7 +171,8 @@ def reportes_pantalla():
     st.header("📊 Reportes")
     query = supabase.table("movimientos_inventario").select("*, productos_maestro(nombre, formato_medida)").eq("tipo_movimiento", "CONTEO").execute().data
     if not query:
-        st.warning("No hay registros."); return
+        st.warning("No hay registros.")
+        return
     
     df = pd.json_normalize(query)
     sesiones = sorted(df['notas'].unique().tolist(), reverse=True)
