@@ -20,7 +20,6 @@ st.markdown(f"""
     [data-testid="stSidebar"] {{ background-color: #111111; border-right: 1px solid #333; }}
     .stMarkdown, p, label, .stMetric, span, .stHeader, .stTab {{ color: #FFFFFF !important; }}
     
-    /* BOTONES: 170.86px x 32.59px */
     div.stButton > button {{
         background-color: #FFCC00 !important;
         color: #000000 !important;
@@ -38,9 +37,6 @@ st.markdown(f"""
     }}
     
     div.stButton > button p {{ color: #000000 !important; font-size: 14px !important; margin: 0 !important; }}
-
-    /* Espaciado Sede/Menú */
-    [data-testid="stVerticalBlock"] > div:has(div.nav-active),
     [data-testid="stVerticalBlock"] > div:has(button) {{ gap: 0.5rem !important; }}
 
     .nav-active > div > button {{ background-color: #FFFFFF !important; border: 2px solid #FFCC00 !important; }}
@@ -53,8 +49,7 @@ st.markdown(f"""
     .stTextInput>div>div>input {{ background-color: #1A1A1A; color: white; border: 1px solid #333; }}
     h1, h2, h3 {{ color: #FFCC00 !important; }}
     
-    /* Estilo para texto alineado de usuario */
-    .user-info {{ font-family: monospace; white-space: pre; color: #FFCC00; font-size: 13px; }}
+    .user-info {{ font-family: monospace; white-space: pre; color: #FFCC00; font-size: 13px; margin-bottom: 10px; }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -118,29 +113,55 @@ def reportes_pantalla():
         st.dataframe(df_s[['productos_maestro.nombre', 'ubicacion', 'Cant']], use_container_width=True)
 
 def admin_usuarios(locales_dict):
-    st.header("👤 Usuarios")
-    t1, t2 = st.tabs(["Crear/Editar", "Eliminar"])
-    with t1:
+    st.header("👤 Gestión de Usuarios")
+    if 'user_action' not in st.session_state: st.session_state.user_action = None
+
+    c1, c2, c3 = st.columns(3)
+    with c1: 
+        if st.button("Crear Admin"): st.session_state.user_action = "admin"
+    with c2: 
+        if st.button("Crear Staff"): st.session_state.user_action = "staff"
+    with c3: 
+        if st.button("Modificar/Eliminar"): st.session_state.user_action = "edit"
+
+    st.divider()
+
+    if st.session_state.user_action in ["admin", "staff"]:
+        rol_txt = "Administrador" if st.session_state.user_action == "admin" else "Staff"
+        st.subheader(f"Nuevo {rol_txt}")
         with st.form("UserForm"):
-            n = st.text_input("Nombre"); u = st.text_input("Usuario"); p = st.text_input("Clave")
-            r = st.selectbox("Rol", ["Staff", "Admin"])
-            # Lógica condicional: Si es Admin, el local es 1 (Global) por defecto y no se pide
+            n = st.text_input("Nombre Completo")
+            u = st.text_input("Nombre de Usuario")
+            p = st.text_input("Contraseña")
             l_id = 1
-            if r == "Staff":
-                l_sel = st.selectbox("Sede", list(locales_dict.keys()))
+            if st.session_state.user_action == "staff":
+                l_sel = st.selectbox("Asignar Sede", list(locales_dict.keys()))
                 l_id = locales_dict[l_sel]
             if st.form_submit_button("Guardar"):
-                supabase.table("usuarios_sistema").upsert({"nombre_apellido": n, "id_local": l_id, "usuario": u, "clave": p, "rol": r}, on_conflict="usuario").execute()
-                st.success(f"Usuario {r} guardado.")
-    with t2:
-        res = supabase.table("usuarios_sistema").select("usuario").execute().data
+                rol_db = "Admin" if st.session_state.user_action == "admin" else "Staff"
+                supabase.table("usuarios_sistema").upsert({"nombre_apellido": n, "id_local": l_id, "usuario": u, "clave": p, "rol": rol_db}, on_conflict="usuario").execute()
+                st.success("Guardado exitosamente."); st.session_state.user_action = None; st.rerun()
+
+    elif st.session_state.user_action == "edit":
+        st.subheader("Modificar o Eliminar")
+        res = supabase.table("usuarios_sistema").select("*").execute().data
         if res:
-            u_del = st.selectbox("Usuario a borrar", [x['usuario'] for x in res])
-            st.markdown('<div class="red-btn">', unsafe_allow_html=True)
-            if st.button("Borrar"):
-                supabase.table("usuarios_sistema").delete().eq("usuario", u_del).execute()
-                st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
+            u_map = {x['usuario']: x for x in res}
+            u_sel = st.selectbox("Seleccione Usuario", list(u_map.keys()))
+            if u_sel:
+                curr = u_map[u_sel]
+                with st.form("EditForm"):
+                    en = st.text_input("Nombre", value=curr['nombre_apellido'])
+                    ep = st.text_input("Nueva Clave", value=curr['clave'])
+                    col_del, col_save = st.columns(2)
+                    if st.form_submit_button("Actualizar Datos"):
+                        supabase.table("usuarios_sistema").update({"nombre_apellido": en, "clave": ep}).eq("usuario", u_sel).execute()
+                        st.success("Actualizado."); st.rerun()
+                st.markdown('<div class="red-btn">', unsafe_allow_html=True)
+                if st.button("Eliminar permanentemente"):
+                    supabase.table("usuarios_sistema").delete().eq("usuario", u_sel).execute()
+                    st.warning("Usuario eliminado."); st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
 
 def admin_maestro():
     st.header("⚙️ Maestro")
@@ -168,7 +189,7 @@ def main():
                     if u.lower() == "admin" and p == "654321.": st.session_state.auth_user = {"user": "Admin", "role": "Admin", "local": 1}; st.rerun()
                     res = supabase.table("usuarios_sistema").select("*").eq("usuario", u).eq("clave", p).execute().data
                     if res: st.session_state.auth_user = {"user": u, "role": res[0]['rol'], "local": res[0]['id_local']}; st.rerun()
-                    else: st.error("Error.")
+                    else: st.error("Acceso denegado.")
         return
 
     if 'menu_option' not in st.session_state: st.session_state.menu_option = "📋 Ingreso"
@@ -179,10 +200,7 @@ def main():
     if user['role'] == "Admin":
         user['local'] = ld[st.sidebar.selectbox("Sede:", list(ld.keys()), index=list(ld.keys()).index(li.get(user['local'], list(ld.keys())[0])))]
 
-    # Información de usuario en dos líneas alineadas
-    nombre_user = user['user']
-    nombre_sede = li.get(user['local'], "N/A")
-    st.sidebar.markdown(f"""<div class="user-info">Usuario : {nombre_user}\nSede    : {nombre_sede}</div>""", unsafe_allow_html=True)
+    st.sidebar.markdown(f"""<div class="user-info">Usuario : {user['user']}\nSede    : {li.get(user['local'], "N/A")}</div>""", unsafe_allow_html=True)
     st.sidebar.divider()
 
     opts = ["📋 Ingreso", "📊 Reportes", "👤 Usuarios", "⚙️ Maestro"] if user['role'] == "Admin" else ["📋 Ingreso", "📊 Reportes"]
