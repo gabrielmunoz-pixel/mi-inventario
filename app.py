@@ -13,26 +13,38 @@ except:
     st.error("Error: Revisa los Secrets en Streamlit Cloud.")
     st.stop()
 
-# --- 2. DISEÑO VISUAL ---
+# --- 2. DISEÑO VISUAL CORREGIDO ---
+# Se ajustó el CSS para que el texto sea siempre visible y negro en los botones estándar
 st.markdown("""
     <style>
     .stApp { background-color: #000000; color: #FFFFFF; }
     [data-testid="stSidebar"] { background-color: #111111; border-right: 1px solid #333; }
     .stMarkdown, p, label, .stMetric, span, .stHeader, .stTab { color: #FFFFFF !important; }
     
+    /* Botones Estándar (Login, Añadir, Guardar) */
     div.stButton > button {
-        background-color: #FFFFFF !important;
+        background-color: #FFCC00 !important;
         color: #000000 !important;
-        font-weight: 800 !important;
-        border: 2px solid #FFCC00 !important;
+        font-weight: bold !important;
+        border: 1px solid #FFCC00 !important;
+        opacity: 1 !important;
+        visibility: visible !important;
     }
+    
+    /* Forzar que el texto del botón se vea siempre negro */
+    div.stButton > button p {
+        color: #000000 !important;
+    }
+
+    /* Botones Especiales */
+    .red-btn > div > button { background-color: #DD0000 !important; border-color: #DD0000 !important; }
+    .red-btn > div > button p { color: #FFFFFF !important; }
+    
+    .green-btn > div > button { background-color: #28a745 !important; border-color: #28a745 !important; }
+    .green-btn > div > button p { color: #FFFFFF !important; }
     
     .stSelectbox div[data-baseweb="select"] > div { background-color: #1A1A1A; color: white; border: 1px solid #FFCC00; }
     .stTextInput>div>div>input { background-color: #1A1A1A; color: white; border: 1px solid #333; }
-    .stFileUploader { background-color: #1A1A1A; padding: 10px; border-radius: 5px; border: 1px dashed #FFCC00; }
-
-    .red-btn > div > button { background-color: #DD0000 !important; color: #FFFFFF !important; }
-    .green-btn > div > button { background-color: #28a745 !important; color: #FFFFFF !important; }
     
     h1, h2, h3 { color: #FFCC00 !important; }
     </style>
@@ -117,7 +129,7 @@ def ingreso_inventario_pantalla(local_id, user_key):
                         "tipo_movimiento": "CONTEO", "ubicacion": row['Ubicación'], "notas": session_id
                     }).execute()
                 st.session_state.carritos_usuarios[user_key] = []
-                st.success(f"¡Inventario cargado! Sesión: {session_id}")
+                st.success(f"Inventario cargado: {session_id}")
                 st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
             
@@ -138,76 +150,41 @@ def reportes_pantalla(locales_dict):
     df = pd.json_normalize(data)
     if 'notas' in df.columns:
         sesiones = sorted(df['notas'].unique().tolist(), reverse=True)
-        sesion_select = st.selectbox("Seleccione Sesión de Inventario:", sesiones)
+        sesion_select = st.selectbox("Seleccione Sesión:", sesiones)
         if sesion_select:
             df_sesion = df[df['notas'] == sesion_select].copy()
             df_sesion['factor'] = df_sesion['productos_maestro.formato_medida'].apply(extraer_valor_formato)
             df_sesion['Cant_Ing'] = (df_sesion['cantidad'] / df_sesion['factor']).round(2)
             detalle = df_sesion[['productos_maestro.nombre', 'ubicacion', 'Cant_Ing', 'productos_maestro.formato_medida']]
-            detalle.columns = ['Producto', 'Ubicación', 'Cantidad Ingresada', 'Formato']
-            st.subheader(f"Detalle: {sesion_select}")
+            detalle.columns = ['Producto', 'Ubicación', 'Cantidad', 'Formato']
             st.dataframe(detalle, use_container_width=True)
 
 def admin_panel():
     st.header("⚙️ Maestro de Productos")
     
-    # --- SECCIÓN CARGA MASIVA ---
     with st.expander("📤 Carga Masiva desde Excel/CSV"):
-        st.write("Sube un archivo con las columnas: nombre, formato_medida, umb, categoria")
         uploaded_file = st.file_uploader("Elegir archivo", type=["xlsx", "csv"])
         if uploaded_file:
             try:
-                if uploaded_file.name.endswith('.csv'): df_upload = pd.read_csv(uploaded_file)
-                else: df_upload = pd.read_excel(uploaded_file)
-                
-                st.write("Vista previa de carga:")
+                df_upload = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
                 st.dataframe(df_upload.head())
-                
-                if st.button("🚀 SUBIR MASIVAMENTE A BASE DE DATOS"):
-                    data_to_insert = df_upload.to_dict(orient='records')
-                    supabase.table("productos_maestro").upsert(data_to_insert).execute()
+                if st.button("🚀 INICIAR CARGA MASIVA"):
+                    supabase.table("productos_maestro").upsert(df_upload.to_dict(orient='records')).execute()
                     st.success("¡Carga masiva completada!")
                     st.rerun()
             except Exception as e:
-                st.error(f"Error al procesar archivo: {e}")
+                st.error(f"Error: {e}")
 
     st.divider()
-    
-    # --- SECCIÓN EDITOR DIRECTO ---
     st.subheader("✏️ Editor de Productos")
     res = supabase.table("productos_maestro").select("*").execute().data
     if res:
         df_prod = pd.DataFrame(res)
         edited_df = st.data_editor(df_prod, num_rows="dynamic", use_container_width=True, key="maestro_editor")
-        if st.button("💾 GUARDAR CAMBIOS DEL EDITOR"):
-            if not edited_df.empty:
-                supabase.table("productos_maestro").upsert(edited_df.to_dict(orient='records')).execute()
-                st.success("¡Cambios guardados!")
-                st.rerun()
-
-def mantenedor_usuarios(locales_dict):
-    st.header("👤 Gestión de Usuarios")
-    t1, t2 = st.tabs(["Crear / Editar", "Borrar Usuario"])
-    with t1:
-        with st.form("UserForm"):
-            n = st.text_input("Nombre y Apellido")
-            l_sel = st.selectbox("Local Asignado", list(locales_dict.keys()))
-            u = st.text_input("Usuario")
-            p = st.text_input("Clave")
-            r = st.selectbox("Rol", ["Staff", "Admin"])
-            if st.form_submit_button("GUARDAR"):
-                supabase.table("usuarios_sistema").upsert({"nombre_apellido": n, "id_local": locales_dict[l_sel], "usuario": u, "clave": p, "rol": r}, on_conflict="usuario").execute()
-                st.success("Usuario actualizado.")
-    with t2:
-        res = supabase.table("usuarios_sistema").select("*").execute().data
-        if res:
-            df = pd.DataFrame(res)
-            user_del = st.selectbox("Eliminar a:", df["usuario"])
-            st.markdown('<div class="red-btn">', unsafe_allow_html=True)
-            if st.button("ELIMINAR DEFINITIVAMENTE"):
-                supabase.table("usuarios_sistema").delete().eq("usuario", user_del).execute()
-                st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
+        if st.button("💾 GUARDAR CAMBIOS"):
+            supabase.table("productos_maestro").upsert(edited_df.to_dict(orient='records')).execute()
+            st.success("¡Cambios guardados!")
+            st.rerun()
 
 def main():
     if 'auth_user' not in st.session_state:
@@ -236,13 +213,12 @@ def main():
     st.sidebar.image("Logo AE.jpg", use_container_width=True)
     if user['role'] == "Admin":
         current_name = locales_inv.get(user['local'], list(locales_dict.keys())[0])
-        nuevo_local = st.sidebar.selectbox("Local Activo:", list(locales_dict.keys()), index=list(locales_dict.keys()).index(current_name))
+        nuevo_local = st.sidebar.selectbox("Cambio de Sede:", list(locales_dict.keys()), index=list(locales_dict.keys()).index(current_name))
         user['local'] = locales_dict[nuevo_local]
 
     st.sidebar.markdown(f"**Usuario:** {user['user']} | **Sede:** {locales_inv.get(user['local'])}")
     menu = ["📋 Ingreso de Inventario", "📊 Reportes", "👤 Mantenedor Usuarios", "⚙️ Maestro Productos"]
-    actual_menu = menu if user['role'] == "Admin" else menu[:2]
-    choice = st.sidebar.radio("Navegación", actual_menu)
+    choice = st.sidebar.radio("Navegación", menu if user['role'] == "Admin" else menu[:2])
 
     if st.sidebar.button("Cerrar Sesión"):
         del st.session_state.auth_user
