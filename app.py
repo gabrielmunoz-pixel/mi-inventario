@@ -29,6 +29,7 @@ st.markdown("""
     
     .stSelectbox div[data-baseweb="select"] > div { background-color: #1A1A1A; color: white; border: 1px solid #FFCC00; }
     .stTextInput>div>div>input { background-color: #1A1A1A; color: white; border: 1px solid #333; }
+    .stFileUploader { background-color: #1A1A1A; padding: 10px; border-radius: 5px; border: 1px dashed #FFCC00; }
 
     .red-btn > div > button { background-color: #DD0000 !important; color: #FFFFFF !important; }
     .green-btn > div > button { background-color: #28a745 !important; color: #FFFFFF !important; }
@@ -90,45 +91,31 @@ def ingreso_inventario_pantalla(local_id, user_key):
     if st.session_state.carritos_usuarios[user_key]:
         st.divider()
         st.subheader("📝 Estado de inventario actual")
-        
         df_temp = pd.DataFrame(st.session_state.carritos_usuarios[user_key])
         
         edited_df = st.data_editor(
             df_temp,
             column_config={
-                "id_producto": None, 
-                "Factor": None,
+                "id_producto": None, "Factor": None,
                 "Producto": st.column_config.TextColumn(disabled=True),
                 "Formato": st.column_config.TextColumn(disabled=True),
-                "Ubicación": st.column_config.SelectboxColumn(
-                    options=["Bodega", "Cámara de frío", "Producción", "Cocina"],
-                    required=True
-                ),
+                "Ubicación": st.column_config.SelectboxColumn(options=["Bodega", "Cámara de frío", "Producción", "Cocina"], required=True),
                 "Cantidad": st.column_config.NumberColumn(min_value=0, step=1)
             },
-            num_rows="dynamic",
-            use_container_width=True,
-            key=f"editor_{user_key}"
+            num_rows="dynamic", use_container_width=True, key=f"editor_{user_key}"
         )
 
         col_confirm, col_cancel = st.columns(2)
         with col_confirm:
             st.markdown('<div class="green-btn">', unsafe_allow_html=True)
             if st.button("✅ FINALIZAR Y CARGAR"):
-                # Generamos un ID de sesión único basado en tiempo
                 session_id = f"SES-{user_key[:3].upper()}-{datetime.now().strftime('%Y%m%d%H%M')}"
-                
                 for row in edited_df.to_dict(orient='records'):
                     total_umb = row['Cantidad'] * row['Factor']
                     supabase.table("movimientos_inventario").insert({
-                        "id_local": local_id,
-                        "id_producto": row['id_producto'],
-                        "cantidad": total_umb,
-                        "tipo_movimiento": "CONTEO",
-                        "ubicacion": row['Ubicación'],
-                        "notas": session_id # Usamos el campo notas para guardar el ID de sesión
+                        "id_local": local_id, "id_producto": row['id_producto'], "cantidad": total_umb,
+                        "tipo_movimiento": "CONTEO", "ubicacion": row['Ubicación'], "notas": session_id
                     }).execute()
-                
                 st.session_state.carritos_usuarios[user_key] = []
                 st.success(f"¡Inventario cargado! Sesión: {session_id}")
                 st.rerun()
@@ -143,55 +130,60 @@ def ingreso_inventario_pantalla(local_id, user_key):
 
 def reportes_pantalla(locales_dict):
     st.header("📊 Reportes por Sesión")
-    
-    # Obtenemos todos los registros de conteo
     query = supabase.table("movimientos_inventario").select("*, productos_maestro(nombre, formato_medida, umb)").eq("tipo_movimiento", "CONTEO")
     data = query.execute().data
-    
     if not data:
-        st.warning("No hay registros de inventario en la base de datos.")
+        st.warning("No hay registros de inventario.")
         return
-
     df = pd.json_normalize(data)
-    
-    # 1. Selector de Sesión (Guardado en 'notas')
     if 'notas' in df.columns:
         sesiones = sorted(df['notas'].unique().tolist(), reverse=True)
         sesion_select = st.selectbox("Seleccione Sesión de Inventario:", sesiones)
-        
         if sesion_select:
             df_sesion = df[df['notas'] == sesion_select].copy()
-            
-            # Limpiar tabla para el usuario
             df_sesion['factor'] = df_sesion['productos_maestro.formato_medida'].apply(extraer_valor_formato)
-            df_sesion['Cantidad_Original'] = (df_sesion['cantidad'] / df_sesion['factor']).round(2)
-            
-            detalle = df_sesion[['productos_maestro.nombre', 'ubicacion', 'Cantidad_Original', 'productos_maestro.formato_medida']]
+            df_sesion['Cant_Ing'] = (df_sesion['cantidad'] / df_sesion['factor']).round(2)
+            detalle = df_sesion[['productos_maestro.nombre', 'ubicacion', 'Cant_Ing', 'productos_maestro.formato_medida']]
             detalle.columns = ['Producto', 'Ubicación', 'Cantidad Ingresada', 'Formato']
-            
             st.subheader(f"Detalle: {sesion_select}")
             st.dataframe(detalle, use_container_width=True)
-            
-            # Resumen Total de la Sesión
-            total_items = len(detalle)
-            st.metric("Total Productos Contados", total_items)
 
 def admin_panel():
     st.header("⚙️ Maestro de Productos")
+    
+    # --- SECCIÓN CARGA MASIVA ---
+    with st.expander("📤 Carga Masiva desde Excel/CSV"):
+        st.write("Sube un archivo con las columnas: nombre, formato_medida, umb, categoria")
+        uploaded_file = st.file_uploader("Elegir archivo", type=["xlsx", "csv"])
+        if uploaded_file:
+            try:
+                if uploaded_file.name.endswith('.csv'): df_upload = pd.read_csv(uploaded_file)
+                else: df_upload = pd.read_excel(uploaded_file)
+                
+                st.write("Vista previa de carga:")
+                st.dataframe(df_upload.head())
+                
+                if st.button("🚀 SUBIR MASIVAMENTE A BASE DE DATOS"):
+                    data_to_insert = df_upload.to_dict(orient='records')
+                    supabase.table("productos_maestro").upsert(data_to_insert).execute()
+                    st.success("¡Carga masiva completada!")
+                    st.rerun()
+            except Exception as e:
+                st.error(f"Error al procesar archivo: {e}")
+
+    st.divider()
+    
+    # --- SECCIÓN EDITOR DIRECTO ---
+    st.subheader("✏️ Editor de Productos")
     res = supabase.table("productos_maestro").select("*").execute().data
     if res:
         df_prod = pd.DataFrame(res)
-        # Se asegura que el editor tenga una llave única para refrescar
         edited_df = st.data_editor(df_prod, num_rows="dynamic", use_container_width=True, key="maestro_editor")
-        
-        col1, col2 = st.columns([1, 4])
-        with col1:
-            if st.button("💾 GUARDAR CAMBIOS"):
-                # Upsert de los datos modificados
-                if not edited_df.empty:
-                    supabase.table("productos_maestro").upsert(edited_df.to_dict(orient='records')).execute()
-                    st.success("¡Base de datos de productos actualizada!")
-                    st.rerun()
+        if st.button("💾 GUARDAR CAMBIOS DEL EDITOR"):
+            if not edited_df.empty:
+                supabase.table("productos_maestro").upsert(edited_df.to_dict(orient='records')).execute()
+                st.success("¡Cambios guardados!")
+                st.rerun()
 
 def mantenedor_usuarios(locales_dict):
     st.header("👤 Gestión de Usuarios")
@@ -205,7 +197,7 @@ def mantenedor_usuarios(locales_dict):
             r = st.selectbox("Rol", ["Staff", "Admin"])
             if st.form_submit_button("GUARDAR"):
                 supabase.table("usuarios_sistema").upsert({"nombre_apellido": n, "id_local": locales_dict[l_sel], "usuario": u, "clave": p, "rol": r}, on_conflict="usuario").execute()
-                st.success("Guardado.")
+                st.success("Usuario actualizado.")
     with t2:
         res = supabase.table("usuarios_sistema").select("*").execute().data
         if res:
