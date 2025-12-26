@@ -13,7 +13,7 @@ except:
     st.error("Error: Revisa los Secrets en Streamlit Cloud.")
     st.stop()
 
-# --- 2. DISEÑO VISUAL (MEDIDAS Y ESPACIOS EXACTOS) ---
+# --- 2. DISEÑO VISUAL ---
 st.markdown(f"""
     <style>
     .stApp {{ background-color: #000000; color: #FFFFFF; }}
@@ -33,17 +33,15 @@ st.markdown(f"""
         align-items: center !important;
         justify-content: center !important;
         padding: 0 !important;
-        margin-bottom: -18px !important; /* Espacio reducido entre botones */
+        margin-bottom: -18px !important;
         border-radius: 4px;
     }}
     
     div.stButton > button p {{ color: #000000 !important; font-size: 14px !important; margin: 0 !important; }}
 
-    /* Espaciado entre Sede y Menú (Reducido a la mitad según inspección) */
+    /* Espaciado Sede/Menú */
     [data-testid="stVerticalBlock"] > div:has(div.nav-active),
-    [data-testid="stVerticalBlock"] > div:has(button) {{
-        gap: 0.5rem !important;
-    }}
+    [data-testid="stVerticalBlock"] > div:has(button) {{ gap: 0.5rem !important; }}
 
     .nav-active > div > button {{ background-color: #FFFFFF !important; border: 2px solid #FFCC00 !important; }}
     .red-btn > div > button {{ background-color: #DD0000 !important; border-color: #DD0000 !important; }}
@@ -54,10 +52,13 @@ st.markdown(f"""
     .stSelectbox div[data-baseweb="select"] > div {{ background-color: #1A1A1A; color: white; border: 1px solid #FFCC00; }}
     .stTextInput>div>div>input {{ background-color: #1A1A1A; color: white; border: 1px solid #333; }}
     h1, h2, h3 {{ color: #FFCC00 !important; }}
+    
+    /* Estilo para texto alineado de usuario */
+    .user-info {{ font-family: monospace; white-space: pre; color: #FFCC00; font-size: 13px; }}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. LOGICA AUXILIAR ---
+# --- 3. LÓGICA AUXILIAR ---
 def get_locales_map():
     res = supabase.table("locales").select("id, nombre").execute().data
     return {l['nombre']: l['id'] for l in res} if res else {}
@@ -72,26 +73,21 @@ def ingreso_inventario_pantalla(local_id, user_key):
     st.header("📋 Ingreso de Inventario")
     if 'carritos_usuarios' not in st.session_state: st.session_state.carritos_usuarios = {}
     if user_key not in st.session_state.carritos_usuarios: st.session_state.carritos_usuarios[user_key] = []
-
     res = supabase.table("productos_maestro").select("*").execute().data
     if not res: return
     prod_map = {f"{p['nombre']} | {p['formato_medida']}": p for p in res}
-    
     busqueda = st.text_input("🔍 Buscar:", placeholder="Producto...")
     opciones = [opc for opc in prod_map.keys() if busqueda.lower() in opc.lower()]
     seleccion = st.selectbox("Producto:", [""] + opciones)
-    
     if seleccion:
         p = prod_map[seleccion]
         col1, col2 = st.columns(2)
         with col1: ubi = st.selectbox("Ubicación:", ["Bodega", "Cámara de frío", "Producción", "Cocina"])
         with col2: cant = st.number_input(f"Cant:", min_value=0.0, step=1.0)
-        
         if st.button("Ingresar"):
             item = {"id_producto": p['id'], "Producto": p['nombre'], "Ubicación": ubi, "Cantidad": float(cant), "Formato": p['formato_medida'], "Factor": extraer_valor_formato(p['formato_medida'])}
             st.session_state.carritos_usuarios[user_key].append(item)
             st.toast(f"Ok: {p['nombre']}")
-
     if st.session_state.carritos_usuarios[user_key]:
         df_temp = pd.DataFrame(st.session_state.carritos_usuarios[user_key])
         edited_df = st.data_editor(df_temp, column_config={"id_producto": None, "Factor": None, "Producto": st.column_config.TextColumn(disabled=True)}, num_rows="dynamic", use_container_width=True)
@@ -126,11 +122,16 @@ def admin_usuarios(locales_dict):
     t1, t2 = st.tabs(["Crear/Editar", "Eliminar"])
     with t1:
         with st.form("UserForm"):
-            n = st.text_input("Nombre"); u = st.text_input("Usuario"); p = st.text_input("Clave"); r = st.selectbox("Rol", ["Staff", "Admin"])
-            l = st.selectbox("Sede", list(locales_dict.keys()))
+            n = st.text_input("Nombre"); u = st.text_input("Usuario"); p = st.text_input("Clave")
+            r = st.selectbox("Rol", ["Staff", "Admin"])
+            # Lógica condicional: Si es Admin, el local es 1 (Global) por defecto y no se pide
+            l_id = 1
+            if r == "Staff":
+                l_sel = st.selectbox("Sede", list(locales_dict.keys()))
+                l_id = locales_dict[l_sel]
             if st.form_submit_button("Guardar"):
-                supabase.table("usuarios_sistema").upsert({"nombre_apellido": n, "id_local": locales_dict[l], "usuario": u, "clave": p, "rol": r}, on_conflict="usuario").execute()
-                st.success("Usuario actualizado.")
+                supabase.table("usuarios_sistema").upsert({"nombre_apellido": n, "id_local": l_id, "usuario": u, "clave": p, "rol": r}, on_conflict="usuario").execute()
+                st.success(f"Usuario {r} guardado.")
     with t2:
         res = supabase.table("usuarios_sistema").select("usuario").execute().data
         if res:
@@ -178,7 +179,10 @@ def main():
     if user['role'] == "Admin":
         user['local'] = ld[st.sidebar.selectbox("Sede:", list(ld.keys()), index=list(ld.keys()).index(li.get(user['local'], list(ld.keys())[0])))]
 
-    st.sidebar.markdown(f"**Usuario:** {user['user']} | **Sede:** {li.get(user['local'])}")
+    # Información de usuario en dos líneas alineadas
+    nombre_user = user['user']
+    nombre_sede = li.get(user['local'], "N/A")
+    st.sidebar.markdown(f"""<div class="user-info">Usuario : {nombre_user}\nSede    : {nombre_sede}</div>""", unsafe_allow_html=True)
     st.sidebar.divider()
 
     opts = ["📋 Ingreso", "📊 Reportes", "👤 Usuarios", "⚙️ Maestro"] if user['role'] == "Admin" else ["📋 Ingreso", "📊 Reportes"]
