@@ -14,7 +14,7 @@ except:
     st.error("Error de conexión con Supabase.")
     st.stop()
 
-# --- 2. GESTIÓN DE SESIÓN PERSISTENTE ---
+# --- 2. GESTIÓN DE SESIÓN PERSISTENTE Y LOGOUT ---
 def sync_session():
     params = st.query_params
     if "user_data" in params and "auth_user" not in st.session_state:
@@ -22,53 +22,47 @@ def sync_session():
             st.session_state.auth_user = json.loads(params["user_data"])
         except:
             pass
+    
     if "auth_user" in st.session_state:
         st.query_params["user_data"] = json.dumps(st.session_state.auth_user)
-    else:
-        if "user_data" in st.query_params:
-            del st.query_params["user_data"]
 
-# --- 3. DISEÑO VISUAL (CORRECCIÓN AGRESIVA IPHONE) ---
+def logout():
+    # Limpiar estado
+    if "auth_user" in st.session_state:
+        del st.session_state.auth_user
+    # Limpiar carritos
+    if "carritos" in st.session_state:
+        st.session_state.carritos = {}
+    # Limpiar parámetros URL (Crucial para iPhone)
+    st.query_params.clear()
+    st.rerun()
+
+# --- 3. DISEÑO VISUAL (OPTIMIZADO PARA IPHONE Y AE STYLE) ---
 st.markdown(f"""
     <style>
     .stApp {{ background-color: #000000; color: #FFFFFF; }}
     [data-testid="stSidebar"] {{ background-color: #111111; border-right: 1px solid #333; }}
     
-    /* SOLUCIÓN RADICAL PARA IPHONE (TODOS LOS NAVEGADORES) */
-    /* Forzamos que el botón del menú sea un bloque gigante y visible */
+    /* BOTÓN FLOTANTE PARA ABRIR MENÚ EN IPHONE */
     [data-testid="stSidebarCollapsedControl"] {{
-        display: flex !important;
-        visibility: visible !important;
-        position: fixed !important;
-        top: 15px !important;
-        left: 15px !important;
-        width: 60px !important;
-        height: 60px !important;
         background-color: #FFCC00 !important;
-        border-radius: 50% !important;
-        z-index: 9999999 !important;
-        box-shadow: 0px 4px 10px rgba(0,0,0,0.5) !important;
-        justify-content: center !important;
-        align-items: center !important;
+        border-radius: 8px !important;
+        left: 10px !important;
+        top: 10px !important;
+        width: 50px !important;
+        height: 50px !important;
+        z-index: 1000000 !important;
     }}
-    
-    /* El icono dentro del botón (las flechas >>) */
     [data-testid="stSidebarCollapsedControl"] svg {{
         fill: #000000 !important;
-        width: 35px !important;
-        height: 35px !important;
-        transform: scale(1.2);
+        width: 30px !important;
+        height: 30px !important;
     }}
 
-    /* Empujar el contenido hacia abajo para que no choque con el botón en iPhone */
-    .main .block-container {{
-        padding-top: 80px !important;
-    }}
-
-    /* Estilos de tabla y botones AE */
+    /* TABLA COMPACTA */
     [data-testid="stDataEditor"] div {{ font-size: 11px !important; }}
-    .stMarkdown, p, label, .stMetric, span, .stHeader, .stTab {{ color: #FFFFFF !important; }}
     
+    /* BOTONES AE: 170.86px x 32.59px */
     div.stButton > button {{
         background-color: #FFCC00 !important;
         color: #000000 !important;
@@ -77,34 +71,29 @@ st.markdown(f"""
         min-width: 170.86px !important;
         max-width: 170.86px !important;
         height: 32.59px !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        padding: 0 !important;
-        margin-bottom: -18px !important;
         border-radius: 4px;
+        margin-bottom: -18px !important;
     }}
-    
-    div.stButton > button p {{ color: #000000 !important; font-size: 13px !important; margin: 0 !important; }}
+    div.stButton > button p {{ font-size: 13px !important; color: #000000 !important; }}
+
     .nav-active > div > button {{ background-color: #FFFFFF !important; border: 2px solid #FFCC00 !important; }}
     .red-btn > div > button {{ background-color: #DD0000 !important; border-color: #DD0000 !important; }}
     .red-btn > div > button p {{ color: #FFFFFF !important; }}
     .green-btn > div > button {{ background-color: #28a745 !important; border-color: #28a745 !important; }}
     .green-btn > div > button p {{ color: #FFFFFF !important; }}
 
+    /* TOASTS */
     [data-testid="stToast"] {{ background-color: #FFCC00 !important; border: 1px solid #000000 !important; }}
-    [data-testid="stToast"] [data-testid="stMarkdownContainer"] p {{ color: #000000 !important; font-weight: bold !important; }}
-    [data-testid="stToast"] button {{ color: #000000 !important; }}
+    [data-testid="stToast"] p {{ color: #000000 !important; font-weight: bold !important; }}
 
     .stSelectbox div[data-baseweb="select"] > div {{ background-color: #1A1A1A; color: white; border: 1px solid #FFCC00; }}
     .stTextInput>div>div>input {{ background-color: #1A1A1A; color: white; border: 1px solid #333; }}
-    h1, h2, h3 {{ color: #FFCC00 !important; }}
     
     .user-info {{ font-family: monospace; white-space: pre; color: #FFCC00; font-size: 12px; margin-bottom: 10px; }}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 4. FUNCIONES ---
+# --- 4. FUNCIONES LÓGICAS ---
 def get_locales_map():
     res = supabase.table("locales").select("id, nombre").execute().data
     return {l['nombre']: l['id'] for l in res} if res else {}
@@ -217,6 +206,7 @@ def main():
     ld = get_locales_map(); li = {v: k for k, v in ld.items()}
     if 'opt' not in st.session_state: st.session_state.opt = "📋 Ingreso"
 
+    # SIDEBAR
     st.sidebar.image("Logo AE.jpg", use_container_width=True)
     if user['role'] == "Admin":
         idx = list(ld.keys()).index(li.get(user['local'], list(ld.keys())[0]))
@@ -233,10 +223,11 @@ def main():
         st.sidebar.markdown('</div>', unsafe_allow_html=True)
 
     st.sidebar.divider()
-    if st.sidebar.button("Cerrar Sesión"): 
-        del st.session_state.auth_user
-        st.rerun()
+    # CORRECCIÓN CIERRE DE SESIÓN
+    if st.sidebar.button("Cerrar Sesión"):
+        logout()
 
+    # CONTENIDO
     if st.session_state.opt == "📋 Ingreso": ingreso_inventario_pantalla(user['local'], user['user'])
     elif st.session_state.opt == "📊 Reportes": 
         st.header("📊 Reportes")
