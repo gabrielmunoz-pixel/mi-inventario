@@ -41,10 +41,6 @@ def get_locales_map():
     res = supabase.table("locales").select("id, nombre").execute().data
     return {l['nombre']: l['id'] for l in res} if res else {}
 
-def get_stock_actual(producto_id, local_id):
-    res = supabase.table("movimientos_inventario").select("cantidad").eq("id_producto", producto_id).eq("id_local", local_id).execute().data
-    return sum(item['cantidad'] for item in res) if res else 0
-
 def extraer_valor_formato(formato_str):
     match = re.search(r"(\d+)", str(formato_str))
     return int(match.group(1)) if match else 1
@@ -54,7 +50,6 @@ def extraer_valor_formato(formato_str):
 def ingreso_inventario_pantalla(local_id, user_key):
     st.header("📋 Ingreso de Inventario Mensual")
     
-    # Inicializar carrito específico por usuario si no existe
     if 'carritos_usuarios' not in st.session_state:
         st.session_state.carritos_usuarios = {}
     
@@ -65,7 +60,6 @@ def ingreso_inventario_pantalla(local_id, user_key):
     if not res: return
     prod_map = {f"{p['nombre']} | {p['formato_medida']}": p for p in res}
     
-    # Buscador
     busqueda = st.text_input("🔍 Buscar producto para contar:", placeholder="Escribe el nombre...")
     opciones = [opc for opc in prod_map.keys() if busqueda.lower() in opc.lower()]
     seleccion = st.selectbox("Selecciona producto:", [""] + opciones)
@@ -81,62 +75,61 @@ def ingreso_inventario_pantalla(local_id, user_key):
             cant = st.number_input(f"Cantidad ({p['formato_medida']}):", min_value=0.0, step=1.0)
         
         if st.button("AÑADIR AL CONTEO"):
-            total_umb = cant * factor
             item = {
                 "id_producto": p['id'],
                 "Producto": p['nombre'],
                 "Ubicación": ubi,
                 "Cantidad": float(cant),
-                "Factor": factor,
-                "TotalUMB": float(total_umb)
+                "Formato": p['formato_medida'],
+                "Factor": factor
             }
             st.session_state.carritos_usuarios[user_key].append(item)
             st.toast(f"Añadido: {p['nombre']}")
 
-    # --- TABLA DE RESUMEN EDITABLE Y LÓGICA DE CÁLCULO ---
+    # --- TABLA DE RESUMEN (ESTADO DE INVENTARIO ACTUAL) ---
     if st.session_state.carritos_usuarios[user_key]:
         st.divider()
-        st.subheader(f"📝 Conteo de {user_key}")
+        st.subheader("📝 Estado de inventario actual")
         
         df_temp = pd.DataFrame(st.session_state.carritos_usuarios[user_key])
         
-        # Configuramos el editor para que "Ubicación" sea selectbox y TotalUMB no se edite a mano
+        # Mostramos solo lo necesario para el conteo
+        # Factor e id_producto se mantienen ocultos pero presentes en el DataFrame
         edited_df = st.data_editor(
             df_temp,
             column_config={
-                "id_producto": None,  # Ocultar ID
-                "Factor": None,       # Ocultar factor de conversión
+                "id_producto": None, 
+                "Factor": None,
+                "Producto": st.column_config.TextColumn(disabled=True),
+                "Formato": st.column_config.TextColumn(disabled=True),
                 "Ubicación": st.column_config.SelectboxColumn(
                     options=["Bodega", "Cámara de frío", "Producción", "Cocina"],
                     required=True
                 ),
-                "TotalUMB": st.column_config.NumberColumn(disabled=True), # Bloqueado
-                "Producto": st.column_config.TextColumn(disabled=True)    # Bloqueado
+                "Cantidad": st.column_config.NumberColumn(min_value=0, step=1)
             },
             num_rows="dynamic",
             use_container_width=True,
             key=f"editor_{user_key}"
         )
 
-        # RE-CÁLCULO LÓGICO: Si la cantidad cambió en la tabla, actualizamos el TotalUMB
-        # Esto ocurre antes de procesar el botón de carga
-        edited_df["TotalUMB"] = edited_df["Cantidad"] * edited_df["Factor"]
-        st.session_state.carritos_usuarios[user_key] = edited_df.to_dict(orient='records')
-
         col_confirm, col_cancel = st.columns(2)
         with col_confirm:
             st.markdown('<div class="green-btn">', unsafe_allow_html=True)
             if st.button("✅ FINALIZAR Y CARGAR"):
-                for row in st.session_state.carritos_usuarios[user_key]:
+                # Aquí realizamos el cálculo de TotalUMB justo antes de insertar
+                for row in edited_df.to_dict(orient='records'):
+                    total_umb_calculado = row['Cantidad'] * row['Factor']
                     supabase.table("movimientos_inventario").insert({
                         "id_local": local_id,
                         "id_producto": row['id_producto'],
-                        "cantidad": row['TotalUMB'],
+                        "cantidad": total_umb_calculado,
                         "tipo_movimiento": "CONTEO",
                         "ubicacion": row['Ubicación']
                     }).execute()
+                
                 st.session_state.carritos_usuarios[user_key] = []
-                st.success("¡Inventario cargado!")
+                st.success("¡Inventario cargado exitosamente!")
                 st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
             
@@ -157,11 +150,7 @@ def reportes_pantalla(locales_dict):
     if data:
         df = pd.json_normalize(data)
         
-        with st.expander("🕒 Historial de Conteo"):
-            df_hist = df[['id', 'created_at', 'productos_maestro.nombre', 'cantidad']].copy()
-            df_hist.columns = ['ID', 'Fecha/Hora', 'Producto', 'Total UMB']
-            st.dataframe(df_hist, use_container_width=True)
-
+        # TABLA DE STOCK CONSOLIDADO (Donde sí se muestra el cálculo UMB)
         df_stock = df.groupby(['productos_maestro.nombre', 'productos_maestro.formato_medida', 'productos_maestro.umb']).agg({'cantidad': 'sum'}).reset_index()
         df_stock['factor'] = df_stock['productos_maestro.formato_medida'].apply(extraer_valor_formato)
         df_stock['Stock'] = (df_stock['cantidad'] / df_stock['factor']).round(2)
@@ -171,7 +160,7 @@ def reportes_pantalla(locales_dict):
         df_final.columns = ['Producto', 'Formato', 'Stock', 'UMB', 'StockUMB']
         st.dataframe(df_final, use_container_width=True)
 
-# --- MANTENEDORES (SIN CAMBIOS) ---
+# --- MANTENEDORES Y MAIN (SIN CAMBIOS) ---
 
 def mantenedor_usuarios(locales_dict):
     st.header("👤 Gestión de Usuarios")
@@ -185,7 +174,7 @@ def mantenedor_usuarios(locales_dict):
             r = st.selectbox("Rol", ["Staff", "Admin"])
             if st.form_submit_button("GUARDAR"):
                 supabase.table("usuarios_sistema").upsert({"nombre_apellido": n, "id_local": locales_dict[l_sel], "usuario": u, "clave": p, "rol": r}, on_conflict="usuario").execute()
-                st.success("Hecho.")
+                st.success("Guardado.")
     with t2:
         res = supabase.table("usuarios_sistema").select("*").execute().data
         if res:
@@ -206,8 +195,6 @@ def admin_panel():
         if st.button("GUARDAR CAMBIOS"):
             supabase.table("productos_maestro").upsert(edited_df.to_dict(orient='records')).execute()
             st.success("Guardado.")
-
-# --- MAIN ---
 
 def main():
     if 'auth_user' not in st.session_state:
