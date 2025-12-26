@@ -13,13 +13,14 @@ except:
     st.error("Error: Revisa los Secrets en Streamlit Cloud.")
     st.stop()
 
-# --- 2. DISEÑO VISUAL ---
+# --- 2. DISEÑO VISUAL (INCLUYE CORRECCIÓN DE CARTEL/TOAST) ---
 st.markdown(f"""
     <style>
     .stApp {{ background-color: #000000; color: #FFFFFF; }}
     [data-testid="stSidebar"] {{ background-color: #111111; border-right: 1px solid #333; }}
     .stMarkdown, p, label, .stMetric, span, .stHeader, .stTab {{ color: #FFFFFF !important; }}
     
+    /* BOTONES: 170.86px x 32.59px */
     div.stButton > button {{
         background-color: #FFCC00 !important;
         color: #000000 !important;
@@ -44,6 +45,20 @@ st.markdown(f"""
     .red-btn > div > button p {{ color: #FFFFFF !important; }}
     .green-btn > div > button {{ background-color: #28a745 !important; border-color: #28a745 !important; }}
     .green-btn > div > button p {{ color: #FFFFFF !important; }}
+
+    /* CORRECCIÓN DEL CARTEL (TOAST) */
+    [data-testid="stToast"] {{
+        background-color: #FFCC00 !important;
+        border: 1px solid #000000 !important;
+    }}
+    [data-testid="stToast"] [data-testid="stMarkdownContainer"] p {{
+        color: #000000 !important;
+        font-weight: bold !important;
+    }}
+    /* Icono de cerrar del toast */
+    [data-testid="stToast"] button {{
+        color: #000000 !important;
+    }}
 
     .stSelectbox div[data-baseweb="select"] > div {{ background-color: #1A1A1A; color: white; border: 1px solid #FFCC00; }}
     .stTextInput>div>div>input {{ background-color: #1A1A1A; color: white; border: 1px solid #333; }}
@@ -115,7 +130,6 @@ def reportes_pantalla():
 def admin_usuarios(locales_dict):
     st.header("👤 Gestión de Usuarios")
     if 'user_action' not in st.session_state: st.session_state.user_action = None
-
     c1, c2, c3 = st.columns(3)
     with c1: 
         if st.button("Crear Admin"): st.session_state.user_action = "admin"
@@ -123,9 +137,7 @@ def admin_usuarios(locales_dict):
         if st.button("Crear Staff"): st.session_state.user_action = "staff"
     with c3: 
         if st.button("Modificar/Eliminar"): st.session_state.user_action = "edit"
-
     st.divider()
-
     if st.session_state.user_action in ["admin", "staff"]:
         rol_txt = "Administrador" if st.session_state.user_action == "admin" else "Staff"
         st.subheader(f"Nuevo {rol_txt}")
@@ -141,7 +153,6 @@ def admin_usuarios(locales_dict):
                 rol_db = "Admin" if st.session_state.user_action == "admin" else "Staff"
                 supabase.table("usuarios_sistema").upsert({"nombre_apellido": n, "id_local": l_id, "usuario": u, "clave": p, "rol": rol_db}, on_conflict="usuario").execute()
                 st.success("Guardado exitosamente."); st.session_state.user_action = None; st.rerun()
-
     elif st.session_state.user_action == "edit":
         st.subheader("Modificar o Eliminar")
         res = supabase.table("usuarios_sistema").select("*").execute().data
@@ -153,7 +164,6 @@ def admin_usuarios(locales_dict):
                 with st.form("EditForm"):
                     en = st.text_input("Nombre", value=curr['nombre_apellido'])
                     ep = st.text_input("Nueva Clave", value=curr['clave'])
-                    col_del, col_save = st.columns(2)
                     if st.form_submit_button("Actualizar Datos"):
                         supabase.table("usuarios_sistema").update({"nombre_apellido": en, "clave": ep}).eq("usuario", u_sel).execute()
                         st.success("Actualizado."); st.rerun()
