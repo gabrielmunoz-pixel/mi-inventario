@@ -33,80 +33,69 @@ def logout():
     st.query_params.clear()
     st.rerun()
 
-# --- 3. DISEÑO VISUAL (CORRECCIÓN QUIRÚRGICA DE CONTRASTE) ---
+# --- 3. DISEÑO VISUAL (AJUSTE QUIRÚRGICO DE COLORES) ---
 st.markdown(f"""
     <style>
-    /* Fondo General y Textos Base en Blanco */
-    .stApp {{ background-color: #000000; color: #FFFFFF !important; }}
+    /* Fondo General */
+    .stApp {{ background-color: #000000; }}
     [data-testid="stSidebar"] {{ background-color: #111111; border-right: 1px solid #333; }}
-    
-    /* TODO EL TEXTO DE LA PÁGINA EN BLANCO (Etiquetas, mensajes, títulos) */
-    .stMarkdown, p, label, .stMetric, span, .stHeader, .stTab, li, h1, h2, h3, .stWarning, .stInfo, .stExpander p {{ 
+
+    /* 1. TEXTOS ESPECÍFICOS EN BLANCO (Los que me detallaste) */
+    /* "Selecciona producto", "Buscar producto", "Nombre", "Usuario", "Clave", "Sede" */
+    div[data-testid="stWidgetLabel"] p, 
+    .stHeader h1, 
+    .stHeader h2,
+    .stMarkdown p,
+    .stExpander p {{ 
         color: #FFFFFF !important; 
     }}
+    
+    /* "No hay registros" y mensajes de estado */
+    .stAlert p, .stWarning p {{ color: #FFFFFF !important; }}
 
-    /* FORZAR BLANCO ESPECÍFICO PARA LABELS DE INPUTS (Nombre, Usuario, Buscar producto, etc) */
-    div[data-testid="stWidgetLabel"] p {{
-        color: #FFFFFF !important;
-    }}
-
-    /* --- TEXTO NEGRO ÚNICAMENTE DENTRO DE LOS CAMPOS BLANCOS --- */
-    /* 1. Input de búsqueda */
+    /* 2. TEXTO NEGRO EN EL MENÚ DESPLEGABLE Y BÚSQUEDA (Donde el fondo es blanco) */
+    /* Caja de búsqueda */
     .stTextInput>div>div>input {{ 
         background-color: #FFFFFF !important; 
         color: #000000 !important; 
     }}
-    
-    /* 2. Caja de Selección (Selectbox) - El valor seleccionado */
+
+    /* Caja del selector (Selecciona producto) */
     div[data-baseweb="select"] > div {{ 
         background-color: #FFFFFF !important; 
     }}
-    div[data-baseweb="select"] div[data-testid="stMarkdownContainer"] p,
-    div[data-baseweb="select"] span {{
+    
+    /* Texto dentro de la caja y de la lista desplegable */
+    div[data-baseweb="select"] *, 
+    li[role="option"], 
+    div[role="option"] {{
         color: #000000 !important;
     }}
 
-    /* 3. Lista de opciones del desplegable (Menú cascada) */
-    ul[role="listbox"] li, 
-    div[role="option"] p,
-    div[role="option"] span {{
-        color: #000000 !important;
-    }}
-
-    /* Notificaciones (Toasts) */
+    /* 3. OTROS ELEMENTOS MANTENIDOS */
     [data-testid="stToast"] {{ background-color: #FFCC00 !important; border: 1px solid #000000 !important; }}
-    [data-testid="stToast"] [data-testid="stMarkdownContainer"] p {{ color: #000000 !important; font-weight: bold !important; }}
+    [data-testid="stToast"] p {{ color: #000000 !important; font-weight: bold !important; }}
 
-    /* Botón Menú iPhone */
     [data-testid="stSidebarCollapsedControl"] {{
         background-color: #FFCC00 !important;
-        left: 10px !important;
-        top: 10px !important;
-        width: 50px !important;
-        height: 50px !important;
-        z-index: 1000000 !important;
+        left: 10px !important; top: 10px !important; width: 50px !important; height: 50px !important;
     }}
     [data-testid="stSidebarCollapsedControl"] svg {{ fill: #000000 !important; }}
 
-    /* BOTONES AE: 170.86px x 32.59px */
     div.stButton > button {{
         background-color: #FFCC00 !important;
         color: #000000 !important;
         font-weight: bold !important;
         min-width: 170.86px !important;
-        max-width: 170.86px !important;
         height: 32.59px !important;
-        border-radius: 4px;
-        margin-bottom: -18px !important;
     }}
-    div.stButton > button p {{ font-size: 13px !important; color: #000000 !important; }}
+    div.stButton > button p {{ color: #000000 !important; }}
     
     .nav-active > div > button {{ background-color: #FFFFFF !important; border: 2px solid #FFCC00 !important; }}
     .red-btn > div > button {{ background-color: #DD0000 !important; }}
     .green-btn > div > button {{ background-color: #28a745 !important; }}
     
-    [data-testid="stDataEditor"] div {{ font-size: 11px !important; }}
-    .user-info {{ font-family: monospace; white-space: pre; color: #FFCC00; font-size: 12px; margin-bottom: 10px; }}
+    .user-info {{ font-family: monospace; color: #FFCC00; font-size: 12px; }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -242,7 +231,6 @@ def admin_usuarios(locales):
 # --- 6. MAIN ---
 def main():
     sync_session()
-
     if 'auth_user' not in st.session_state:
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
@@ -259,29 +247,23 @@ def main():
                         st.rerun()
                     else: st.error("Acceso denegado.")
         return
-
     user = st.session_state.auth_user
     ld = get_locales_map(); li = {v: k for k, v in ld.items()}
     if 'opt' not in st.session_state: st.session_state.opt = "📋 Ingreso"
-
     st.sidebar.image("Logo AE.jpg", use_container_width=True)
     if user['role'] == "Admin":
         idx = list(ld.keys()).index(li.get(user['local'], list(ld.keys())[0]))
         user['local'] = ld[st.sidebar.selectbox("Sede:", list(ld.keys()), index=idx)]
-    
     st.sidebar.markdown(f'<div class="user-info">Usuario : {user["user"]}\nSede    : {li.get(user["local"], "N/A")}</div>', unsafe_allow_html=True)
     st.sidebar.divider()
-
     opts = ["📋 Ingreso", "📊 Reportes", "👤 Usuarios", "⚙️ Maestro"] if user['role'] == "Admin" else ["📋 Ingreso", "📊 Reportes"]
     for o in opts:
         act = "nav-active" if st.session_state.opt == o else ""
         st.sidebar.markdown(f'<div class="{act}">', unsafe_allow_html=True)
         if st.sidebar.button(o): st.session_state.opt = o; st.rerun()
         st.sidebar.markdown('</div>', unsafe_allow_html=True)
-
     st.sidebar.divider()
     if st.sidebar.button("Cerrar Sesión"): logout()
-
     if st.session_state.opt == "📋 Ingreso": ingreso_inventario_pantalla(user['local'], user['user'])
     elif st.session_state.opt == "📊 Reportes": reportes_pantalla()
     elif st.session_state.opt == "👤 Usuarios": admin_usuarios(ld)
