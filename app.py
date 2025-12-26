@@ -33,44 +33,47 @@ def logout():
     st.query_params.clear()
     st.rerun()
 
-# --- 3. DISEÑO VISUAL (CONTRASTE BLANCO + IPHONE FIX) ---
+# --- 3. DISEÑO VISUAL (AJUSTE DE CONTRASTE SELECTIVO) ---
 st.markdown(f"""
     <style>
-    /* Fondo General */
+    /* Fondo General y Textos Base en Blanco */
     .stApp {{ background-color: #000000; color: #FFFFFF !important; }}
     [data-testid="stSidebar"] {{ background-color: #111111; border-right: 1px solid #333; }}
     
-    /* CORRECCIÓN DE TEXTOS OSCUROS: Forzar blanco en todo */
+    /* Textos generales en Blanco para fondo negro */
     .stMarkdown, p, label, .stMetric, span, .stHeader, .stTab, li, h1, h2, h3 {{ 
         color: #FFFFFF !important; 
     }}
+
+    /* --- TEXTO NEGRO EN FONDOS CLAROS (SOLUCIÓN) --- */
+    /* Input de búsqueda y campos de texto */
+    .stTextInput>div>div>input {{ background-color: #FFFFFF !important; color: #000000 !important; }}
     
-    /* Forzar blanco en etiquetas de inputs y selectores */
-    div[data-testid="stWidgetLabel"] p {{ color: #FFFFFF !important; }}
-    
-    /* Botón Menú iPhone (Flotante) */
+    /* Barras de Selección (Selectbox) */
+    div[data-baseweb="select"] > div {{ background-color: #FFFFFF !important; }}
+    div[data-baseweb="select"] span {{ color: #000000 !important; }}
+    div[role="listbox"] div {{ color: #000000 !important; }} 
+
+    /* Notificaciones (Toasts) */
+    [data-testid="stToast"] {{ background-color: #FFCC00 !important; border: 1px solid #000000 !important; }}
+    [data-testid="stToast"] [data-testid="stMarkdownContainer"] p {{ color: #000000 !important; font-weight: bold !important; }}
+
+    /* Botón Menú iPhone */
     [data-testid="stSidebarCollapsedControl"] {{
         background-color: #FFCC00 !important;
-        border-radius: 8px !important;
         left: 10px !important;
         top: 10px !important;
         width: 50px !important;
         height: 50px !important;
         z-index: 1000000 !important;
     }}
-    [data-testid="stSidebarCollapsedControl"] svg {{
-        fill: #000000 !important;
-    }}
+    [data-testid="stSidebarCollapsedControl"] svg {{ fill: #000000 !important; }}
 
-    /* Tabla Compacta */
-    [data-testid="stDataEditor"] div {{ font-size: 11px !important; }}
-    
     /* BOTONES AE: 170.86px x 32.59px */
     div.stButton > button {{
         background-color: #FFCC00 !important;
         color: #000000 !important;
         font-weight: bold !important;
-        border: 1px solid #FFCC00 !important;
         min-width: 170.86px !important;
         max-width: 170.86px !important;
         height: 32.59px !important;
@@ -78,17 +81,13 @@ st.markdown(f"""
         margin-bottom: -18px !important;
     }}
     div.stButton > button p {{ font-size: 13px !important; color: #000000 !important; }}
-
-    .nav-active > div > button {{ background-color: #FFFFFF !important; border: 2px solid #FFCC00 !important; }}
-    .red-btn > div > button {{ background-color: #DD0000 !important; border-color: #DD0000 !important; }}
-    .red-btn > div > button p {{ color: #FFFFFF !important; }}
-    .green-btn > div > button {{ background-color: #28a745 !important; border-color: #28a745 !important; }}
-    .green-btn > div > button p {{ color: #FFFFFF !important; }}
-
-    /* Inputs */
-    .stSelectbox div[data-baseweb="select"] > div {{ background-color: #1A1A1A; color: white; border: 1px solid #FFCC00; }}
-    .stTextInput>div>div>input {{ background-color: #1A1A1A; color: white; border: 1px solid #333; }}
     
+    .nav-active > div > button {{ background-color: #FFFFFF !important; border: 2px solid #FFCC00 !important; }}
+    .red-btn > div > button {{ background-color: #DD0000 !important; }}
+    .green-btn > div > button {{ background-color: #28a745 !important; }}
+    
+    /* Tabla compacta */
+    [data-testid="stDataEditor"] div {{ font-size: 11px !important; }}
     .user-info {{ font-family: monospace; white-space: pre; color: #FFCC00; font-size: 12px; margin-bottom: 10px; }}
     </style>
     """, unsafe_allow_html=True)
@@ -104,14 +103,15 @@ def extraer_valor_formato(formato_str):
 
 # --- 5. PANTALLAS ---
 def ingreso_inventario_pantalla(local_id, user_key):
-    st.header("📋 Inventario")
+    st.header("📋 Ingreso de Inventario Mensual")
     if 'carritos' not in st.session_state: st.session_state.carritos = {}
     if user_key not in st.session_state.carritos: st.session_state.carritos[user_key] = []
     
     res = supabase.table("productos_maestro").select("*").execute().data
     if not res: return
     prod_map = {f"{p['nombre']} | {p['formato_medida']}": p for p in res}
-    busqueda = st.text_input("🔍 Buscar:", placeholder="Escribe el nombre...")
+    
+    busqueda = st.text_input("🔍 Buscar producto:", placeholder="Escribe el nombre...")
     opciones = [o for o in prod_map.keys() if busqueda.lower() in o.lower()]
     sel = st.selectbox("Selecciona producto:", [""] + opciones)
     
@@ -126,7 +126,7 @@ def ingreso_inventario_pantalla(local_id, user_key):
                 "Cantidad": float(cant), "Formato": p['formato_medida'], 
                 "Factor": extraer_valor_formato(p['formato_medida'])
             })
-            st.toast(f"Añadido: {p['nombre']}")
+            st.toast(f"✅ Se agregó: {p['nombre']}")
 
     if st.session_state.carritos[user_key]:
         df = pd.DataFrame(st.session_state.carritos[user_key])
@@ -150,10 +150,10 @@ def ingreso_inventario_pantalla(local_id, user_key):
             st.markdown('</div>', unsafe_allow_html=True)
 
 def reportes_pantalla():
-    st.header("📊 Reportes de Inventario")
+    st.header("📊 Reportes")
     query = supabase.table("movimientos_inventario").select("*, productos_maestro(nombre, formato_medida)").eq("tipo_movimiento", "CONTEO").execute().data
     if not query:
-        st.warning("No hay registros disponibles."); return
+        st.warning("No hay registros."); return
     
     df = pd.json_normalize(query)
     sesiones = sorted(df['notas'].unique().tolist(), reverse=True)
@@ -166,16 +166,17 @@ def reportes_pantalla():
         st.dataframe(df_s[['productos_maestro.nombre', 'ubicacion', 'Unidades', 'productos_maestro.formato_medida']], use_container_width=True)
 
 def admin_maestro():
-    st.header("⚙️ Maestro de Productos")
-    # Restaurado Módulo Masivo
+    st.header("⚙️ Maestro")
     with st.expander("📤 Carga Masiva (Excel / CSV)"):
         up = st.file_uploader("Subir archivo", type=["xlsx", "csv"])
         if up and st.button("Procesar Carga"):
-            df_up = pd.read_csv(up) if up.name.endswith('.csv') else pd.read_excel(up)
-            supabase.table("productos_maestro").upsert(df_up.to_dict(orient='records')).execute()
-            st.success("Carga exitosa"); st.rerun()
+            try:
+                df_up = pd.read_csv(up) if up.name.endswith('.csv') else pd.read_excel(up)
+                supabase.table("productos_maestro").upsert(df_up.to_dict(orient='records')).execute()
+                st.success("Carga exitosa"); st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
     
-    st.divider()
     res = supabase.table("productos_maestro").select("*").execute().data
     if res:
         ed = st.data_editor(pd.DataFrame(res), num_rows="dynamic", use_container_width=True)
@@ -184,7 +185,7 @@ def admin_maestro():
             st.rerun()
 
 def admin_usuarios(locales):
-    st.header("👤 Gestión de Usuarios")
+    st.header("👤 Usuarios")
     if 'u_act' not in st.session_state: st.session_state.u_act = None
     c1, c2, c3 = st.columns(3)
     with c1: 
@@ -194,6 +195,7 @@ def admin_usuarios(locales):
     with c3: 
         if st.button("Modificar"): st.session_state.u_act = "edit"
     
+    st.divider()
     if st.session_state.u_act in ["admin", "staff"]:
         with st.form("UserF"):
             n = st.text_input("Nombre"); u = st.text_input("Usuario"); p = st.text_input("Clave")
@@ -204,6 +206,19 @@ def admin_usuarios(locales):
                 rol = "Admin" if st.session_state.u_act == "admin" else "Staff"
                 supabase.table("usuarios_sistema").upsert({"nombre_apellido": n, "id_local": l_id, "usuario": u, "clave": p, "rol": rol}, on_conflict="usuario").execute()
                 st.session_state.u_act = None; st.rerun()
+    elif st.session_state.u_act == "edit":
+        res = supabase.table("usuarios_sistema").select("*").execute().data
+        if res:
+            u_sel = st.selectbox("Seleccione", [x['usuario'] for x in res])
+            curr = next(x for x in res if x['usuario'] == u_sel)
+            with st.form("EditF"):
+                en = st.text_input("Nombre", value=curr['nombre_apellido']); ep = st.text_input("Clave", value=curr['clave'])
+                if st.form_submit_button("Actualizar"):
+                    supabase.table("usuarios_sistema").update({"nombre_apellido": en, "clave": ep}).eq("usuario", u_sel).execute(); st.rerun()
+            st.markdown('<div class="red-btn">', unsafe_allow_html=True)
+            if st.button("Eliminar Usuario"):
+                supabase.table("usuarios_sistema").delete().eq("usuario", u_sel).execute(); st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
 # --- 6. MAIN ---
 def main():
