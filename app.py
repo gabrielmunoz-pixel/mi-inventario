@@ -33,7 +33,7 @@ def logout():
     st.query_params.clear()
     st.rerun()
 
-# --- 3. DISEÑO VISUAL (CORRECCIÓN ESTRICTA DE COLOR) ---
+# --- 3. DISEÑO VISUAL (CORRECCIÓN DE TEXTO EN LISTA DESPLEGABLE) ---
 st.markdown(f"""
     <style>
     /* Fondo General y Textos Base en Blanco */
@@ -47,13 +47,25 @@ st.markdown(f"""
     /* BARRA DE BÚSQUEDA (INPUT) */
     .stTextInput>div>div>input {{ background-color: #FFFFFF !important; color: #000000 !important; }}
     
-    /* BARRA DE SELECCIÓN (SELECTBOX) Y SUS OPCIONES - TEXTO NEGRO FORZADO */
-    div[data-baseweb="select"] > div {{ background-color: #FFFFFF !important; }}
-    div[data-baseweb="select"] * {{ color: #000000 !important; }} 
+    /* --- CORRECCIÓN DEFINITIVA PARA LA LISTA DE PRODUCTOS --- */
+    /* Forzar texto negro en el contenedor del selectbox y todas las opciones de la lista */
+    div[data-baseweb="select"] div, 
+    div[data-baseweb="select"] span, 
+    li[role="option"], 
+    div[role="option"],
+    div[data-testid="stMarkdownContainer"] p {{
+        color: #000000 !important;
+    }}
     
-    /* Lista desplegable (opciones coincidentes) */
-    ul[role="listbox"] li {{ color: #000000 !important; background-color: #FFFFFF !important; }}
-    div[role="listbox"] div {{ color: #000000 !important; }}
+    /* Asegurar que el fondo del menú desplegable sea blanco */
+    div[data-baseweb="select"] > div, 
+    ul[role="listbox"], 
+    div[role="listbox"] {{
+        background-color: #FFFFFF !important;
+    }}
+
+    /* Re-forzar blanco solo para los textos que SÍ deben ser blancos (títulos y etiquetas fuera de inputs) */
+    [data-testid="stHeader"] h1, .stHeader, label p {{ color: #FFFFFF !important; }}
 
     /* Notificaciones (Toasts) */
     [data-testid="stToast"] {{ background-color: #FFCC00 !important; border: 1px solid #000000 !important; }}
