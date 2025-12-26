@@ -14,7 +14,7 @@ except:
     st.error("Error de conexión con Supabase.")
     st.stop()
 
-# --- 2. GESTIÓN DE SESIÓN PERSISTENTE (URL PARAMS) ---
+# --- 2. GESTIÓN DE SESIÓN PERSISTENTE ---
 def sync_session():
     params = st.query_params
     if "user_data" in params and "auth_user" not in st.session_state:
@@ -28,39 +28,47 @@ def sync_session():
         if "user_data" in st.query_params:
             del st.query_params["user_data"]
 
-# --- 3. DISEÑO VISUAL (SOLUCIÓN ESPECÍFICA IPHONE) ---
+# --- 3. DISEÑO VISUAL (CORRECCIÓN AGRESIVA IPHONE) ---
 st.markdown(f"""
     <style>
     .stApp {{ background-color: #000000; color: #FFFFFF; }}
     [data-testid="stSidebar"] {{ background-color: #111111; border-right: 1px solid #333; }}
     
-    /* FUERZA VISIBILIDAD DE FLECHA EN IPHONE/IOS */
+    /* SOLUCIÓN RADICAL PARA IPHONE (TODOS LOS NAVEGADORES) */
+    /* Forzamos que el botón del menú sea un bloque gigante y visible */
     [data-testid="stSidebarCollapsedControl"] {{
         display: flex !important;
         visibility: visible !important;
-        left: 10px !important;
-        top: 10px !important;
-        z-index: 999999 !important;
-        color: #FFCC00 !important;
-        background-color: rgba(255, 204, 0, 0.25) !important;
-        border-radius: 10px !important;
-        width: 45px !important;
-        height: 45px !important;
+        position: fixed !important;
+        top: 15px !important;
+        left: 15px !important;
+        width: 60px !important;
+        height: 60px !important;
+        background-color: #FFCC00 !important;
+        border-radius: 50% !important;
+        z-index: 9999999 !important;
+        box-shadow: 0px 4px 10px rgba(0,0,0,0.5) !important;
+        justify-content: center !important;
+        align-items: center !important;
     }}
     
-    /* Asegurar que el icono interno sea visible */
+    /* El icono dentro del botón (las flechas >>) */
     [data-testid="stSidebarCollapsedControl"] svg {{
-        fill: #FFCC00 !important;
-        width: 30px !important;
-        height: 30px !important;
+        fill: #000000 !important;
+        width: 35px !important;
+        height: 35px !important;
+        transform: scale(1.2);
     }}
 
-    /* Tabla Compacta para Celulares */
+    /* Empujar el contenido hacia abajo para que no choque con el botón en iPhone */
+    .main .block-container {{
+        padding-top: 80px !important;
+    }}
+
+    /* Estilos de tabla y botones AE */
     [data-testid="stDataEditor"] div {{ font-size: 11px !important; }}
-    
     .stMarkdown, p, label, .stMetric, span, .stHeader, .stTab {{ color: #FFFFFF !important; }}
     
-    /* BOTONES: 170.86px x 32.59px */
     div.stButton > button {{
         background-color: #FFCC00 !important;
         color: #000000 !important;
@@ -78,15 +86,12 @@ st.markdown(f"""
     }}
     
     div.stButton > button p {{ color: #000000 !important; font-size: 13px !important; margin: 0 !important; }}
-    [data-testid="stVerticalBlock"] > div:has(button) {{ gap: 0.5rem !important; }}
-
     .nav-active > div > button {{ background-color: #FFFFFF !important; border: 2px solid #FFCC00 !important; }}
     .red-btn > div > button {{ background-color: #DD0000 !important; border-color: #DD0000 !important; }}
     .red-btn > div > button p {{ color: #FFFFFF !important; }}
     .green-btn > div > button {{ background-color: #28a745 !important; border-color: #28a745 !important; }}
     .green-btn > div > button p {{ color: #FFFFFF !important; }}
 
-    /* Estilo Toasts */
     [data-testid="stToast"] {{ background-color: #FFCC00 !important; border: 1px solid #000000 !important; }}
     [data-testid="stToast"] [data-testid="stMarkdownContainer"] p {{ color: #000000 !important; font-weight: bold !important; }}
     [data-testid="stToast"] button {{ color: #000000 !important; }}
@@ -99,7 +104,7 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 4. FUNCIONES DE LÓGICA ---
+# --- 4. FUNCIONES ---
 def get_locales_map():
     res = supabase.table("locales").select("id, nombre").execute().data
     return {l['nombre']: l['id'] for l in res} if res else {}
