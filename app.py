@@ -33,26 +33,27 @@ def logout():
     st.query_params.clear()
     st.rerun()
 
-# --- 3. DISEÑO VISUAL (AJUSTE DE CONTRASTE SELECTIVO) ---
+# --- 3. DISEÑO VISUAL (CORRECCIÓN ESTRICTA DE COLOR) ---
 st.markdown(f"""
     <style>
     /* Fondo General y Textos Base en Blanco */
     .stApp {{ background-color: #000000; color: #FFFFFF !important; }}
     [data-testid="stSidebar"] {{ background-color: #111111; border-right: 1px solid #333; }}
     
-    /* Textos generales en Blanco para fondo negro */
     .stMarkdown, p, label, .stMetric, span, .stHeader, .stTab, li, h1, h2, h3 {{ 
         color: #FFFFFF !important; 
     }}
 
-    /* --- TEXTO NEGRO EN FONDOS CLAROS (SOLUCIÓN) --- */
-    /* Input de búsqueda y campos de texto */
+    /* BARRA DE BÚSQUEDA (INPUT) */
     .stTextInput>div>div>input {{ background-color: #FFFFFF !important; color: #000000 !important; }}
     
-    /* Barras de Selección (Selectbox) */
+    /* BARRA DE SELECCIÓN (SELECTBOX) Y SUS OPCIONES - TEXTO NEGRO FORZADO */
     div[data-baseweb="select"] > div {{ background-color: #FFFFFF !important; }}
-    div[data-baseweb="select"] span {{ color: #000000 !important; }}
-    div[role="listbox"] div {{ color: #000000 !important; }} 
+    div[data-baseweb="select"] * {{ color: #000000 !important; }} 
+    
+    /* Lista desplegable (opciones coincidentes) */
+    ul[role="listbox"] li {{ color: #000000 !important; background-color: #FFFFFF !important; }}
+    div[role="listbox"] div {{ color: #000000 !important; }}
 
     /* Notificaciones (Toasts) */
     [data-testid="stToast"] {{ background-color: #FFCC00 !important; border: 1px solid #000000 !important; }}
@@ -86,7 +87,6 @@ st.markdown(f"""
     .red-btn > div > button {{ background-color: #DD0000 !important; }}
     .green-btn > div > button {{ background-color: #28a745 !important; }}
     
-    /* Tabla compacta */
     [data-testid="stDataEditor"] div {{ font-size: 11px !important; }}
     .user-info {{ font-family: monospace; white-space: pre; color: #FFCC00; font-size: 12px; margin-bottom: 10px; }}
     </style>
