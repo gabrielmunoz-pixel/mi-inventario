@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import re
+from datetime import datetime
 from supabase import create_client, Client
 
 # --- 1. CONEXIÓN ---
@@ -86,15 +87,12 @@ def ingreso_inventario_pantalla(local_id, user_key):
             st.session_state.carritos_usuarios[user_key].append(item)
             st.toast(f"Añadido: {p['nombre']}")
 
-    # --- TABLA DE RESUMEN (ESTADO DE INVENTARIO ACTUAL) ---
     if st.session_state.carritos_usuarios[user_key]:
         st.divider()
         st.subheader("📝 Estado de inventario actual")
         
         df_temp = pd.DataFrame(st.session_state.carritos_usuarios[user_key])
         
-        # Mostramos solo lo necesario para el conteo
-        # Factor e id_producto se mantienen ocultos pero presentes en el DataFrame
         edited_df = st.data_editor(
             df_temp,
             column_config={
@@ -117,19 +115,22 @@ def ingreso_inventario_pantalla(local_id, user_key):
         with col_confirm:
             st.markdown('<div class="green-btn">', unsafe_allow_html=True)
             if st.button("✅ FINALIZAR Y CARGAR"):
-                # Aquí realizamos el cálculo de TotalUMB justo antes de insertar
+                # Generamos un ID de sesión único basado en tiempo
+                session_id = f"SES-{user_key[:3].upper()}-{datetime.now().strftime('%Y%m%d%H%M')}"
+                
                 for row in edited_df.to_dict(orient='records'):
-                    total_umb_calculado = row['Cantidad'] * row['Factor']
+                    total_umb = row['Cantidad'] * row['Factor']
                     supabase.table("movimientos_inventario").insert({
                         "id_local": local_id,
                         "id_producto": row['id_producto'],
-                        "cantidad": total_umb_calculado,
+                        "cantidad": total_umb,
                         "tipo_movimiento": "CONTEO",
-                        "ubicacion": row['Ubicación']
+                        "ubicacion": row['Ubicación'],
+                        "notas": session_id # Usamos el campo notas para guardar el ID de sesión
                     }).execute()
                 
                 st.session_state.carritos_usuarios[user_key] = []
-                st.success("¡Inventario cargado exitosamente!")
+                st.success(f"¡Inventario cargado! Sesión: {session_id}")
                 st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
             
@@ -141,26 +142,56 @@ def ingreso_inventario_pantalla(local_id, user_key):
             st.markdown('</div>', unsafe_allow_html=True)
 
 def reportes_pantalla(locales_dict):
-    st.header("📊 Reportes y Comparativa")
-    filtro = st.selectbox("Sede:", ["Todos"] + list(locales_dict.keys()))
-    query = supabase.table("movimientos_inventario").select("id, created_at, cantidad, id_local, productos_maestro(nombre, formato_medida, umb)")
-    if filtro != "Todos": query = query.eq("id_local", locales_dict[filtro])
+    st.header("📊 Reportes por Sesión")
     
+    # Obtenemos todos los registros de conteo
+    query = supabase.table("movimientos_inventario").select("*, productos_maestro(nombre, formato_medida, umb)").eq("tipo_movimiento", "CONTEO")
     data = query.execute().data
-    if data:
-        df = pd.json_normalize(data)
-        
-        # TABLA DE STOCK CONSOLIDADO (Donde sí se muestra el cálculo UMB)
-        df_stock = df.groupby(['productos_maestro.nombre', 'productos_maestro.formato_medida', 'productos_maestro.umb']).agg({'cantidad': 'sum'}).reset_index()
-        df_stock['factor'] = df_stock['productos_maestro.formato_medida'].apply(extraer_valor_formato)
-        df_stock['Stock'] = (df_stock['cantidad'] / df_stock['factor']).round(2)
-        df_stock['StockUMB'] = df_stock['cantidad'].round(2)
-        
-        df_final = df_stock[['productos_maestro.nombre', 'productos_maestro.formato_medida', 'Stock', 'productos_maestro.umb', 'StockUMB']]
-        df_final.columns = ['Producto', 'Formato', 'Stock', 'UMB', 'StockUMB']
-        st.dataframe(df_final, use_container_width=True)
+    
+    if not data:
+        st.warning("No hay registros de inventario en la base de datos.")
+        return
 
-# --- MANTENEDORES Y MAIN (SIN CAMBIOS) ---
+    df = pd.json_normalize(data)
+    
+    # 1. Selector de Sesión (Guardado en 'notas')
+    if 'notas' in df.columns:
+        sesiones = sorted(df['notas'].unique().tolist(), reverse=True)
+        sesion_select = st.selectbox("Seleccione Sesión de Inventario:", sesiones)
+        
+        if sesion_select:
+            df_sesion = df[df['notas'] == sesion_select].copy()
+            
+            # Limpiar tabla para el usuario
+            df_sesion['factor'] = df_sesion['productos_maestro.formato_medida'].apply(extraer_valor_formato)
+            df_sesion['Cantidad_Original'] = (df_sesion['cantidad'] / df_sesion['factor']).round(2)
+            
+            detalle = df_sesion[['productos_maestro.nombre', 'ubicacion', 'Cantidad_Original', 'productos_maestro.formato_medida']]
+            detalle.columns = ['Producto', 'Ubicación', 'Cantidad Ingresada', 'Formato']
+            
+            st.subheader(f"Detalle: {sesion_select}")
+            st.dataframe(detalle, use_container_width=True)
+            
+            # Resumen Total de la Sesión
+            total_items = len(detalle)
+            st.metric("Total Productos Contados", total_items)
+
+def admin_panel():
+    st.header("⚙️ Maestro de Productos")
+    res = supabase.table("productos_maestro").select("*").execute().data
+    if res:
+        df_prod = pd.DataFrame(res)
+        # Se asegura que el editor tenga una llave única para refrescar
+        edited_df = st.data_editor(df_prod, num_rows="dynamic", use_container_width=True, key="maestro_editor")
+        
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            if st.button("💾 GUARDAR CAMBIOS"):
+                # Upsert de los datos modificados
+                if not edited_df.empty:
+                    supabase.table("productos_maestro").upsert(edited_df.to_dict(orient='records')).execute()
+                    st.success("¡Base de datos de productos actualizada!")
+                    st.rerun()
 
 def mantenedor_usuarios(locales_dict):
     st.header("👤 Gestión de Usuarios")
@@ -185,16 +216,6 @@ def mantenedor_usuarios(locales_dict):
                 supabase.table("usuarios_sistema").delete().eq("usuario", user_del).execute()
                 st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
-
-def admin_panel():
-    st.header("⚙️ Maestro de Productos")
-    res = supabase.table("productos_maestro").select("*").execute().data
-    if res:
-        df_prod = pd.DataFrame(res)
-        edited_df = st.data_editor(df_prod, num_rows="dynamic", use_container_width=True)
-        if st.button("GUARDAR CAMBIOS"):
-            supabase.table("productos_maestro").upsert(edited_df.to_dict(orient='records')).execute()
-            st.success("Guardado.")
 
 def main():
     if 'auth_user' not in st.session_state:
