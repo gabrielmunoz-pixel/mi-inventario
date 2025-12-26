@@ -16,32 +16,43 @@ except:
 
 # --- 2. GESTIÓN DE SESIÓN PERSISTENTE (URL PARAMS) ---
 def sync_session():
-    # Recuperar de la URL si no está en session_state
     params = st.query_params
     if "user_data" in params and "auth_user" not in st.session_state:
         try:
             st.session_state.auth_user = json.loads(params["user_data"])
         except:
             pass
-    
-    # Actualizar URL si hay cambio en session_state
     if "auth_user" in st.session_state:
         st.query_params["user_data"] = json.dumps(st.session_state.auth_user)
     else:
         if "user_data" in st.query_params:
             del st.query_params["user_data"]
 
-# --- 3. DISEÑO VISUAL (OPTIMIZADO MÓVIL + AE STYLE) ---
+# --- 3. DISEÑO VISUAL (SOLUCIÓN ESPECÍFICA IPHONE) ---
 st.markdown(f"""
     <style>
     .stApp {{ background-color: #000000; color: #FFFFFF; }}
     [data-testid="stSidebar"] {{ background-color: #111111; border-right: 1px solid #333; }}
     
-    /* Visibilidad Menú Móvil */
+    /* FUERZA VISIBILIDAD DE FLECHA EN IPHONE/IOS */
     [data-testid="stSidebarCollapsedControl"] {{
+        display: flex !important;
+        visibility: visible !important;
+        left: 10px !important;
+        top: 10px !important;
+        z-index: 999999 !important;
         color: #FFCC00 !important;
-        background-color: rgba(255, 204, 0, 0.2) !important;
-        border-radius: 8px !important;
+        background-color: rgba(255, 204, 0, 0.25) !important;
+        border-radius: 10px !important;
+        width: 45px !important;
+        height: 45px !important;
+    }}
+    
+    /* Asegurar que el icono interno sea visible */
+    [data-testid="stSidebarCollapsedControl"] svg {{
+        fill: #FFCC00 !important;
+        width: 30px !important;
+        height: 30px !important;
     }}
 
     /* Tabla Compacta para Celulares */
@@ -75,7 +86,7 @@ st.markdown(f"""
     .green-btn > div > button {{ background-color: #28a745 !important; border-color: #28a745 !important; }}
     .green-btn > div > button p {{ color: #FFFFFF !important; }}
 
-    /* Cartel de Aviso (Toast) */
+    /* Estilo Toasts */
     [data-testid="stToast"] {{ background-color: #FFCC00 !important; border: 1px solid #000000 !important; }}
     [data-testid="stToast"] [data-testid="stMarkdownContainer"] p {{ color: #000000 !important; font-weight: bold !important; }}
     [data-testid="stToast"] button {{ color: #000000 !important; }}
@@ -98,7 +109,6 @@ def extraer_valor_formato(formato_str):
     return int(match.group(1)) if match else 1
 
 # --- 5. PANTALLAS ---
-
 def ingreso_inventario_pantalla(local_id, user_key):
     st.header("📋 Inventario")
     if 'carritos' not in st.session_state: st.session_state.carritos = {}
@@ -179,7 +189,7 @@ def admin_usuarios(locales):
 
 # --- 6. MAIN ---
 def main():
-    sync_session() # Mantener sesión viva
+    sync_session()
 
     if 'auth_user' not in st.session_state:
         col1, col2, col3 = st.columns([1, 2, 1])
@@ -204,7 +214,8 @@ def main():
 
     st.sidebar.image("Logo AE.jpg", use_container_width=True)
     if user['role'] == "Admin":
-        user['local'] = ld[st.sidebar.selectbox("Sede:", list(ld.keys()), index=list(ld.keys()).index(li.get(user['local'], list(ld.keys())[0])))]
+        idx = list(ld.keys()).index(li.get(user['local'], list(ld.keys())[0]))
+        user['local'] = ld[st.sidebar.selectbox("Sede:", list(ld.keys()), index=idx)]
     
     st.sidebar.markdown(f'<div class="user-info">Usuario : {user["user"]}\nSede    : {li.get(user["local"], "N/A")}</div>', unsafe_allow_html=True)
     st.sidebar.divider()
