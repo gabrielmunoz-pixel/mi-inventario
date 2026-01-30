@@ -72,11 +72,12 @@ def ingreso_inventario_pantalla(local_id, user_key):
     
     res = supabase.table("productos_maestro").select("*").execute().data
     if not res: return
+    # Creamos el mapa de opciones directamente para el selectbox
     prod_map = {f"{p['nombre']} | {p['formato_medida']}": p for p in res}
+    opciones = sorted(list(prod_map.keys()))
     
-    busqueda = st.text_input("🔍 Buscar producto:")
-    opciones = [o for o in prod_map.keys() if busqueda.lower() in o.lower()]
-    sel = st.selectbox("Selecciona producto:", [""] + opciones)
+    # Única barra de selección (ya permite buscar escribiendo)
+    sel = st.selectbox("Selecciona o busca el producto:", [""] + opciones)
     
     if sel:
         p = prod_map[sel]
