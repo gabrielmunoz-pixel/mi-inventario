@@ -49,7 +49,6 @@ st.markdown(f"""
     .green-btn > div > button {{ background-color: #28a745 !important; color: white !important; }}
     .user-info {{ font-family: monospace; color: #FFCC00; font-size: 12px; margin-bottom: 10px; }}
 
-    /* AJUSTE PARA ESCRITORIO: Evita que la calculadora sea gigante */
     iframe {{
         max-width: 450px !important;
         display: block;
@@ -145,16 +144,15 @@ def calculadora_basica():
     </script>
     """
     
-    # Renderizado con altura fija y sin scroll
     resultado = components.html(calc_html, height=520, scrolling=False)
     
-    # SOLUCIÓN AL TYPEERROR: Solo procesar si resultado tiene un valor
+    # Cambio lógico: Si hay un resultado de la calculadora, actualizamos la sesión y cerramos
     if resultado is not None:
         try:
             st.session_state.resultado_calc = float(resultado)
             st.session_state.show_calc = False
             st.rerun()
-        except (ValueError, TypeError):
+        except:
             pass
 
 # --- 6. PANTALLAS ---
@@ -177,6 +175,7 @@ def ingreso_inventario_pantalla(local_id, user_key):
         c1, c2, c3 = st.columns([2, 2, 0.6])
         with c1: ubi = st.selectbox("Ubicación:", ["Bodega", "Frío", "Cocina", "Producción"])
         with c2: 
+            # El valor del input ahora está amarrado al resultado de la calculadora
             cant = st.number_input("Cantidad:", min_value=0.0, step=1.0, value=float(st.session_state.resultado_calc))
         with c3:
             st.markdown("<br>", unsafe_allow_html=True)
@@ -195,9 +194,11 @@ def ingreso_inventario_pantalla(local_id, user_key):
                 "Factor": extraer_valor_formato(p['formato_medida'])
             })
             st.toast(f"✅ Añadido: {p['nombre']}")
+            # Limpiamos el resultado después de añadir al carrito
             st.session_state.resultado_calc = 0.0
             st.rerun()
 
+    # El resto del código de tablas y botones de finalizar/borrar se mantiene exactamente igual...
     if st.session_state.carritos[user_key]:
         df = pd.DataFrame(st.session_state.carritos[user_key])
         ed = st.data_editor(df, column_config={"id_producto": None, "Factor": None}, use_container_width=True)
@@ -218,6 +219,7 @@ def ingreso_inventario_pantalla(local_id, user_key):
             if st.button("🗑️ BORRAR"): st.session_state.carritos[user_key] = []; st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
 
+# Las funciones de reportes, admin_maestro, admin_usuarios y main se mantienen idénticas...
 def reportes_pantalla(local_id):
     st.header("📊 Reportes")
     t1, t2 = st.tabs(["🕒 Historial", "📦 Stock Actual"])
@@ -283,7 +285,6 @@ def admin_usuarios(locales):
                 supabase.table("usuarios_sistema").upsert({"nombre_apellido": n, "id_local": l_id, "usuario": u, "clave": p, "rol": rol}, on_conflict="usuario").execute()
                 st.session_state.u_act = None; st.rerun()
 
-# --- 7. MAIN ---
 def main():
     sync_session()
     if 'auth_user' not in st.session_state:
