@@ -33,13 +33,12 @@ def logout():
     st.query_params.clear()
     st.rerun()
 
-# --- 3. DISEÑO VISUAL (CORRECCIÓN PARA MÓVIL) ---
+# --- 3. DISEÑO VISUAL ---
 st.markdown(f"""
     <style>
     .stApp {{ background-color: #000000; }}
     [data-testid="stSidebar"] {{ background-color: #111111; border-right: 1px solid #333; }}
 
-    /* TEXTOS EN BLANCO PURO PARA MÓVIL */
     div[data-testid="stWidgetLabel"] p, label, .stMarkdown p, .stHeader h1, .stHeader h2, .stExpander p {{ 
         color: #FFFFFF !important; 
         -webkit-text-fill-color: #FFFFFF !important;
@@ -47,7 +46,6 @@ st.markdown(f"""
     
     .stAlert p, .stWarning p {{ color: #FFFFFF !important; }}
 
-    /* INPUTS Y SELECTORES */
     .stTextInput>div>div>input {{ 
         background-color: #FFFFFF !important; 
         color: #000000 !important;
@@ -57,7 +55,6 @@ st.markdown(f"""
     div[data-baseweb="select"] > div {{ background-color: #FFFFFF !important; }}
     div[data-baseweb="select"] *, li[role="option"], div[role="option"] {{ color: #000000 !important; }}
 
-    /* BOTONES ESTILO ALEMAN EXPERTO */
     div.stButton > button {{
         background-color: #FFCC00 !important;
         color: #000000 !important;
@@ -127,7 +124,7 @@ def ingreso_inventario_pantalla(local_id, user_key):
                             "id_local": local_id, 
                             "id_producto": r['id_producto'], 
                             "cantidad": r['Cantidad']*r['Factor'], 
-                            "tipo_movimiento": "AJUSTE", # Ajustado por error 23514
+                            "tipo_movimiento": "AJUSTE", 
                             "ubicacion": r['Ubicación']
                         }).execute()
                     st.success("✅ Guardado con éxito")
@@ -140,16 +137,45 @@ def ingreso_inventario_pantalla(local_id, user_key):
             if st.button("Borrar"): st.session_state.carritos[user_key] = []; st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
 
-def reportes_pantalla():
-    st.header("📊 Reportes")
+def reportes_pantalla(local_id):
+    st.header("📊 Reportes de Inventario")
+    
+    tab1, tab2 = st.tabs(["🕒 Historial de Movimientos", "📦 Stock Actual Local"])
+    
     try:
-        query = supabase.table("movimientos_inventario").select("*, productos_maestro(nombre, formato_medida)").execute().data
+        # Traemos todos los movimientos del local actual
+        query = supabase.table("movimientos_inventario").select("*, productos_maestro(nombre, formato_medida)").eq("id_local", local_id).execute().data
+        
         if not query:
-            st.warning("No hay registros.")
+            st.warning("No hay registros para este local.")
             return
+
         df = pd.json_normalize(query)
-        st.dataframe(df, use_container_width=True)
-    except: st.error("Error al cargar reportes.")
+
+        with tab1:
+            st.subheader("Movimientos Recientes")
+            # Limpiamos nombres de columnas para legibilidad
+            df_historial = df.copy()
+            st.dataframe(df_historial[['fecha_hora', 'productos_maestro.nombre', 'tipo_movimiento', 'cantidad', 'ubicacion']], use_container_width=True)
+
+        with tab2:
+            st.subheader(f"Inventario Disponible")
+            # Lógica de Stock: Agrupamos por producto y sumamos cantidades
+            # Nota: En tu DB las SALIDAS ya vienen con valor negativo, por lo que sumarlas da el stock neto.
+            df_stock = df.groupby(['productos_maestro.nombre', 'productos_maestro.formato_medida'])['cantidad'].sum().reset_index()
+            
+            # Convertimos cantidad (base) a unidades según formato
+            df_stock['Factor'] = df_stock['productos_maestro.formato_medida'].apply(extraer_valor_formato)
+            df_stock['Stock Real'] = (df_stock['cantidad'] / df_stock['Factor']).round(2)
+            
+            # Mostrar solo stock positivo o relevante
+            df_final = df_stock[['productos_maestro.nombre', 'productos_maestro.formato_medida', 'Stock Real']]
+            df_final.columns = ['Producto', 'Formato', 'Stock Actual']
+            
+            st.dataframe(df_final, use_container_width=True)
+            
+    except Exception as e:
+        st.error(f"Error al procesar reportes: {e}")
 
 def admin_maestro():
     st.header("⚙️ Maestro")
@@ -242,7 +268,7 @@ def main():
     if st.sidebar.button("Cerrar Sesión"): logout()
     
     if st.session_state.opt == "📋 Ingreso": ingreso_inventario_pantalla(user['local'], user['user'])
-    elif st.session_state.opt == "📊 Reportes": reportes_pantalla()
+    elif st.session_state.opt == "📊 Reportes": reportes_pantalla(user['local'])
     elif st.session_state.opt == "👤 Usuarios": admin_usuarios(ld)
     elif st.session_state.opt == "⚙️ Maestro": admin_maestro()
 
