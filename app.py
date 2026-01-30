@@ -21,19 +21,16 @@ except Exception as e:
 # 2. GESTIÓN DE SESIÓN Y AUTH
 # ==========================================
 def sync_session():
-    """Sincroniza los datos del usuario con los parámetros de la URL."""
     params = st.query_params
     if "user_data" in params and "auth_user" not in st.session_state:
         try:
             st.session_state.auth_user = json.loads(params["user_data"])
         except:
             pass
-    
     if "auth_user" in st.session_state:
         st.query_params["user_data"] = json.dumps(st.session_state.auth_user)
 
 def logout():
-    """Limpia la sesión y reinicia la app."""
     if "auth_user" in st.session_state:
         del st.session_state.auth_user
     if "carritos" in st.session_state:
@@ -42,81 +39,37 @@ def logout():
     st.rerun()
 
 # ==========================================
-# 3. ESTILOS CSS (DISEÑO MODO OSCURO)
+# 3. ESTILOS CSS
 # ==========================================
 st.markdown(f"""
     <style>
-    /* Fondo General */
     .stApp {{ background-color: #000000; }}
-    
-    /* Sidebar */
-    [data-testid="stSidebar"] {{
-        background-color: #111111;
-        border-right: 1px solid #333;
-    }}
-    
-    /* Textos */
-    .stMarkdown p, label p, .stHeader h1, .stHeader h2, .stExpander p, .stAlert p {{
-        color: #FFFFFF !important;
-    }}
-    
-    /* Botones Estándar (Amarillos) */
+    [data-testid="stSidebar"] {{ background-color: #111111; border-right: 1px solid #333; }}
+    .stMarkdown p, label p, .stHeader h1, .stHeader h2, .stExpander p, .stAlert p {{ color: #FFFFFF !important; }}
     div.stButton > button {{ 
-        background-color: #FFCC00 !important; 
-        color: #000000 !important; 
-        font-weight: bold !important; 
-        border-radius: 10px !important;
-        border: none !important;
-        width: 100%;
+        background-color: #FFCC00 !important; color: #000000 !important; 
+        font-weight: bold !important; border-radius: 10px !important; width: 100%;
     }}
-
-    /* Botón Activo en Sidebar */
-    .nav-active > div > button {{
-        background-color: #FFFFFF !important;
-        color: #000000 !important;
-        border: 2px solid #FFCC00 !important;
-    }}
-
-    /* Botones Especiales */
+    .nav-active > div > button {{ background-color: #FFFFFF !important; color: #000000 !important; border: 2px solid #FFCC00 !important; }}
     .red-btn > div > button {{ background-color: #DD0000 !important; color: white !important; }}
     .green-btn > div > button {{ background-color: #28a745 !important; color: white !important; }}
-
-    /* Info de Usuario */
-    .user-info {{
-        font-family: monospace;
-        color: #FFCC00;
-        font-size: 12px;
-        margin-bottom: 10px;
-        padding: 10px;
-        border-bottom: 1px solid #333;
-    }}
-
-    /* Calculadora Iframe */
-    iframe {{
-        max-width: 450px !important;
-        display: block;
-        margin: 0 auto;
-        border: 1px solid #444;
-        border-radius: 15px;
-        background: #000;
-    }}
+    .user-info {{ font-family: monospace; color: #FFCC00; font-size: 12px; margin-bottom: 10px; padding: 10px; border-bottom: 1px solid #333; }}
+    iframe {{ max-width: 450px !important; display: block; margin: 0 auto; border: 1px solid #444; border-radius: 15px; background: #000; }}
     </style>
     """, unsafe_allow_html=True)
 
 # ==========================================
-# 4. FUNCIONES DE APOYO (LÓGICA)
+# 4. FUNCIONES DE APOYO
 # ==========================================
 def get_locales_map():
     try:
         res = supabase.table("locales").select("id, nombre").execute().data
-        if res: return {l['nombre']: l['id'] for l in res}
-        return {}
+        return {l['nombre']: l['id'] for l in res} if res else {}
     except: return {}
 
 def extraer_valor_formato(formato_str):
     match = re.search(r"(\d+)", str(formato_str))
-    if match: return int(match.group(1))
-    return 1
+    return int(match.group(1)) if match else 1
 
 def obtener_stock_dict(local_id):
     try:
@@ -127,33 +80,33 @@ def obtener_stock_dict(local_id):
     except: return {}
 
 # ==========================================
-# 5. COMPONENTE CALCULADORA (HTML/JS)
+# 5. CALCULADORA
 # ==========================================
 def calculadora_basica():
     calc_html = """
     <div id="calc-container" style="background: #000; padding: 10px; border-radius: 15px; font-family: sans-serif;">
         <div id="display" style="background: #1e1e1e; color: #00ff00; padding: 15px; text-align: right; font-size: 28px; border-radius: 10px; margin-bottom: 15px; min-height: 40px; border: 2px solid #333;">0</div>
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
-            <button onclick="press('7')" style="height: 45px; background: #FFCC00; border: none; border-radius: 8px; font-size: 18px; font-weight: bold;">7</button>
-            <button onclick="press('8')" style="height: 45px; background: #FFCC00; border: none; border-radius: 8px; font-size: 18px; font-weight: bold;">8</button>
-            <button onclick="press('9')" style="height: 45px; background: #FFCC00; border: none; border-radius: 8px; font-size: 18px; font-weight: bold;">9</button>
+            <button onclick="press('7')" style="height: 45px; background: #FFCC00; border-radius: 8px; font-weight: bold;">7</button>
+            <button onclick="press('8')" style="height: 45px; background: #FFCC00; border-radius: 8px; font-weight: bold;">8</button>
+            <button onclick="press('9')" style="height: 45px; background: #FFCC00; border-radius: 8px; font-weight: bold;">9</button>
             <button onclick="press('/')" style="height: 45px; background: #333; color: #FFCC00; border: 1px solid #FFCC00; border-radius: 8px;">/</button>
-            <button onclick="press('4')" style="height: 45px; background: #FFCC00; border: none; border-radius: 8px; font-size: 18px; font-weight: bold;">4</button>
-            <button onclick="press('5')" style="height: 45px; background: #FFCC00; border: none; border-radius: 8px; font-size: 18px; font-weight: bold;">5</button>
-            <button onclick="press('6')" style="height: 45px; background: #FFCC00; border: none; border-radius: 8px; font-size: 18px; font-weight: bold;">6</button>
+            <button onclick="press('4')" style="height: 45px; background: #FFCC00; border-radius: 8px; font-weight: bold;">4</button>
+            <button onclick="press('5')" style="height: 45px; background: #FFCC00; border-radius: 8px; font-weight: bold;">5</button>
+            <button onclick="press('6')" style="height: 45px; background: #FFCC00; border-radius: 8px; font-weight: bold;">6</button>
             <button onclick="press('*')" style="height: 45px; background: #333; color: #FFCC00; border: 1px solid #FFCC00; border-radius: 8px;">*</button>
-            <button onclick="press('1')" style="height: 45px; background: #FFCC00; border: none; border-radius: 8px; font-size: 18px; font-weight: bold;">1</button>
-            <button onclick="press('2')" style="height: 45px; background: #FFCC00; border: none; border-radius: 8px; font-size: 18px; font-weight: bold;">2</button>
-            <button onclick="press('3')" style="height: 45px; background: #FFCC00; border: none; border-radius: 8px; font-size: 18px; font-weight: bold;">3</button>
+            <button onclick="press('1')" style="height: 45px; background: #FFCC00; border-radius: 8px; font-weight: bold;">1</button>
+            <button onclick="press('2')" style="height: 45px; background: #FFCC00; border-radius: 8px; font-weight: bold;">2</button>
+            <button onclick="press('3')" style="height: 45px; background: #FFCC00; border-radius: 8px; font-weight: bold;">3</button>
             <button onclick="press('-')" style="height: 45px; background: #333; color: #FFCC00; border: 1px solid #FFCC00; border-radius: 8px;">-</button>
-            <button onclick="press('0')" style="height: 45px; background: #FFCC00; border: none; border-radius: 8px; font-size: 18px; font-weight: bold;">0</button>
-            <button onclick="press('.')" style="height: 45px; background: #FFCC00; border: none; border-radius: 8px; font-size: 18px; font-weight: bold;">.</button>
-            <button onclick="solve()" style="height: 45px; background: #1A73E8; color: white; border: none; border-radius: 8px; font-size: 18px; font-weight: bold;">=</button>
+            <button onclick="press('0')" style="height: 45px; background: #FFCC00; border-radius: 8px; font-weight: bold;">0</button>
+            <button onclick="press('.')" style="height: 45px; background: #FFCC00; border-radius: 8px; font-weight: bold;">.</button>
+            <button onclick="solve()" style="height: 45px; background: #1A73E8; color: white; border-radius: 8px; font-weight: bold;">=</button>
             <button onclick="press('+')" style="height: 45px; background: #333; color: #FFCC00; border: 1px solid #FFCC00; border-radius: 8px;">+</button>
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px;">
-            <button onclick="clearCalc()" style="padding: 12px; background: #440000; color: white; border: none; border-radius: 8px;">Limpiar</button>
-            <button onclick="sendResult()" style="padding: 12px; background: #1A73E8; color: white; border: none; border-radius: 8px; font-weight: bold;">LISTO</button>
+            <button onclick="clearCalc()" style="padding: 12px; background: #440000; color: white; border-radius: 8px;">Limpiar</button>
+            <button onclick="sendResult()" style="padding: 12px; background: #1A73E8; color: white; border-radius: 8px; font-weight: bold;">LISTO</button>
         </div>
     </div>
     <script>
@@ -171,7 +124,7 @@ def calculadora_basica():
     return components.html(calc_html, height=400)
 
 # ==========================================
-# 6. PANTALLA: INGRESO DE INVENTARIO
+# 6. PANTALLA: INGRESO
 # ==========================================
 def ingreso_inventario_pantalla(local_id, user_key):
     st.header("📋 Ingreso de Inventario")
@@ -196,8 +149,7 @@ def ingreso_inventario_pantalla(local_id, user_key):
         with c2:
             placeholder_cant = st.empty()
             cant = placeholder_cant.number_input(
-                "Cantidad:", 
-                min_value=0.0, 
+                "Cantidad:", min_value=0.0, 
                 value=float(st.session_state.resultado_calc),
                 key=f"input_cant_{st.session_state.resultado_calc}"
             )
@@ -276,7 +228,7 @@ def reportes_pantalla(local_id):
     except Exception as e: st.error(f"Error: {e}")
 
 # ==========================================
-# 8. PANTALLA: MAESTRO DE PRODUCTOS
+# 8. PANTALLA: MAESTRO
 # ==========================================
 def admin_maestro(local_id):
     st.header("⚙️ Gestión de Maestro")
@@ -306,10 +258,12 @@ def admin_maestro(local_id):
             st.rerun()
 
 # ==========================================
-# 9. PANTALLA: GESTIÓN DE USUARIOS
+# 9. PANTALLA: USUARIOS (CON VISUALIZADOR)
 # ==========================================
 def admin_usuarios(locales_map):
-    st.header("👤 Usuarios")
+    st.header("👤 Gestión de Usuarios")
+    
+    # --- PARTE 1: CREACIÓN ---
     if 'u_mode' not in st.session_state: st.session_state.u_mode = None
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -317,24 +271,56 @@ def admin_usuarios(locales_map):
     with c2:
         if st.button("➕ Nuevo Staff"): st.session_state.u_mode = "Staff"
     with c3:
-        if st.button("✖️ Cerrar"): st.session_state.u_mode = None
+        if st.button("✖️ Cerrar Formulario"): st.session_state.u_mode = None
+    
     if st.session_state.u_mode:
         with st.form("user_new"):
-            nombre = st.text_input("Nombre")
-            user_log = st.text_input("Login")
-            pw = st.text_input("Clave", type="password")
+            st.subheader(f"Crear {st.session_state.u_mode}")
+            nombre = st.text_input("Nombre Completo")
+            user_log = st.text_input("Usuario (Login)")
+            pw = st.text_input("Contraseña", type="password")
             l_id = 1
             if st.session_state.u_mode == "Staff":
-                l_sel = st.selectbox("Sede", list(locales_map.keys()))
+                l_sel = st.selectbox("Sede Asignada", list(locales_map.keys()))
                 l_id = locales_map[l_sel]
-            if st.form_submit_button("Registrar"):
-                supabase.table("usuarios_sistema").upsert({"nombre_apellido": nombre, "id_local": l_id, "usuario": user_log, "clave": pw, "rol": st.session_state.u_mode}, on_conflict="usuario").execute()
-                st.success("Registrado.")
-                st.session_state.u_mode = None
-                st.rerun()
+            if st.form_submit_button("Registrar Usuario"):
+                if nombre and user_log and pw:
+                    supabase.table("usuarios_sistema").upsert({
+                        "nombre_apellido": nombre, "id_local": l_id, 
+                        "usuario": user_log, "clave": pw, "rol": st.session_state.u_mode
+                    }, on_conflict="usuario").execute()
+                    st.success("Usuario registrado con éxito.")
+                    st.session_state.u_mode = None
+                    st.rerun()
+                else:
+                    st.warning("Completa todos los campos.")
+
+    st.markdown("---")
+    
+    # --- PARTE 2: VISUALIZADOR ---
+    st.subheader("👥 Usuarios Registrados")
+    try:
+        # Traemos usuarios y el nombre del local mediante un join implícito si es posible, 
+        # o procesamos localmente
+        res_u = supabase.table("usuarios_sistema").select("*").execute().data
+        if res_u:
+            df_users = pd.DataFrame(res_u)
+            # Invertimos el mapa de locales para mostrar nombres en lugar de IDs
+            locales_inv = {v: k for k, v in locales_map.items()}
+            df_users['Sede'] = df_users['id_local'].map(locales_inv)
+            
+            # Limpiamos para la vista
+            df_view = df_users[['nombre_apellido', 'usuario', 'rol', 'Sede']].copy()
+            df_view.columns = ['Nombre', 'Login', 'Rol', 'Sede']
+            
+            st.dataframe(df_view, use_container_width=True)
+        else:
+            st.info("No hay usuarios registrados en la base de datos.")
+    except Exception as e:
+        st.error(f"Error al cargar lista de usuarios: {e}")
 
 # ==========================================
-# 10. FUNCIÓN PRINCIPAL (ORQUESTADOR)
+# 10. MAIN
 # ==========================================
 def main():
     sync_session()
@@ -355,24 +341,35 @@ def main():
                         st.rerun()
                     else: st.error("Error de login.")
         return
+
     user = st.session_state.auth_user
     locales = get_locales_map()
     locales_inv = {v: k for k, v in locales.items()}
+    
     if 'opt' not in st.session_state: st.session_state.opt = "📋 Ingreso"
+    
     st.sidebar.image("Logo AE.jpg", use_container_width=True)
+    
     if user['role'] == "Admin" and locales:
         actual_name = locales_inv.get(user['local'], list(locales.keys())[0])
         idx = list(locales.keys()).index(actual_name)
-        nueva_sede = st.sidebar.selectbox("Sede:", list(locales.keys()), index=idx)
+        nueva_sede = st.sidebar.selectbox("Sede Activa:", list(locales.keys()), index=idx)
         user['local'] = locales[nueva_sede]
+    
     st.sidebar.markdown(f'<div class="user-info">👤 {user["user"]}<br>📍 {locales_inv.get(user["local"], "N/A")}</div>', unsafe_allow_html=True)
+    
     menu = ["📋 Ingreso", "📊 Reportes", "👤 Usuarios", "⚙️ Maestro"] if user['role'] == "Admin" else ["📋 Ingreso", "📊 Reportes"]
+    
     for item in menu:
         estilo = "nav-active" if st.session_state.opt == item else ""
         st.sidebar.markdown(f'<div class="{estilo}">', unsafe_allow_html=True)
-        if st.sidebar.button(item): st.session_state.opt = item; st.rerun()
+        if st.sidebar.button(item):
+            st.session_state.opt = item
+            st.rerun()
         st.sidebar.markdown('</div>', unsafe_allow_html=True)
+    
     if st.sidebar.button("🚪 SALIR"): logout()
+    
     if st.session_state.opt == "📋 Ingreso": ingreso_inventario_pantalla(user['local'], user['user'])
     elif st.session_state.opt == "📊 Reportes": reportes_pantalla(user['local'])
     elif st.session_state.opt == "👤 Usuarios": admin_usuarios(locales)
