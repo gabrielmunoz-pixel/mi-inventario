@@ -51,30 +51,20 @@ st.markdown(f"""
         margin: 0 auto;
     }}
 
-    /* Forzar Grid 4x4 en el contenedor de columnas de Streamlit */
-    .calc-container [data-testid="stHorizontalBlock"] {{
-        display: grid !important;
-        grid-template-columns: repeat(4, 1fr) !important;
-        gap: 8px !important;
-    }}
-
-    /* Anular el ancho mínimo que causa el apilamiento vertical */
-    .calc-container [data-testid="column"] {{
-        width: 100% !important;
-        min-width: 0 !important;
-        flex: none !important;
+    /* FORZAR GRID EN MÓVIL: Evita que Streamlit apile las columnas */
+    [data-testid="column"] {{
+        width: calc(25% - 8px) !important;
+        flex: 1 1 calc(25% - 8px) !important;
+        min-width: 0px !important;
     }}
 
     .calc-container button {{
         aspect-ratio: 1 / 1 !important;
         height: auto !important;
         width: 100% !important;
-        padding: 0 !important;
+        padding: 5px !important;
         font-size: 20px !important;
         border-radius: 12px !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
     }}
 
     /* Estilo para números */
@@ -101,6 +91,7 @@ st.markdown(f"""
         background-color: #1A73E8 !important;
         color: white !important;
         height: 50px !important;
+        aspect-ratio: auto !important;
     }}
 
     .nav-active > div > button {{ background-color: #FFFFFF !important; border: 2px solid #FFCC00 !important; }}
@@ -135,7 +126,6 @@ def calculadora_basica():
     
     st.markdown("### 🧮 Calculadora")
     
-    # Display de operación
     st.markdown(f"""
         <div style="background:#1e1e1e; color:#00ff00; padding:15px; border-radius:10px; 
         text-align:right; font-family:monospace; font-size:28px; margin-bottom:10px; border:2px solid #333;">
@@ -145,24 +135,25 @@ def calculadora_basica():
     
     st.markdown('<div class="calc-container">', unsafe_allow_html=True)
     
-    # Estructura 4x4 con iconos para operadores
-    botones = [
-        ("7", "num"), ("8", "num"), ("9", "num"), ("/", "op"),
-        ("4", "num"), ("5", "num"), ("6", "num"), ("*", "op"),
-        ("1", "num"), ("2", "num"), ("3", "num"), ("-", "op"),
-        ("0", "num"), (".", "num"), ("C", "clear"), ("+", "op")
+    # Definición de filas para asegurar la cuadrícula
+    filas = [
+        [("7", "num"), ("8", "num"), ("9", "num"), ("/", "op")],
+        [("4", "num"), ("5", "num"), ("6", "num"), ("*", "op")],
+        [("1", "num"), ("2", "num"), ("3", "num"), ("-", "op")],
+        [("0", "num"), (".", "num"), ("C", "clear"), ("+", "op")]
     ]
     
-    cols = st.columns(4)
-    for i, (label, tipo) in enumerate(botones):
-        with cols[i % 4]:
-            css_class = f"calc-btn-{tipo}"
-            st.markdown(f'<div class="{css_class}">', unsafe_allow_html=True)
-            if st.button(label, key=f"btn_calc_{i}"):
-                if label == "C": st.session_state.calc_val = ""
-                else: st.session_state.calc_val += label
-                st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
+    for fila in filas:
+        cols = st.columns(4)
+        for i, (label, tipo) in enumerate(fila):
+            with cols[i]:
+                css_class = f"calc-btn-{tipo}"
+                st.markdown(f'<div class="{css_class}">', unsafe_allow_html=True)
+                if st.button(label, key=f"btn_calc_{label}_{filas.index(fila)}", use_container_width=True):
+                    if label == "C": st.session_state.calc_val = ""
+                    else: st.session_state.calc_val += label
+                    st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
     
     st.markdown('</div>', unsafe_allow_html=True)
     
@@ -174,10 +165,9 @@ def calculadora_basica():
             st.rerun()
     with c2:
         st.markdown('<div class="calc-enter">', unsafe_allow_html=True)
-        if st.button("LISTO (Enter)", type="primary"):
+        if st.button("LISTO (Enter)", type="primary", use_container_width=True):
             try:
                 if st.session_state.calc_val:
-                    # Cálculo y envío del resultado
                     res = float(eval(st.session_state.calc_val))
                     st.session_state.resultado_calc = res
                     st.session_state.show_calc = False
