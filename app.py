@@ -36,10 +36,11 @@ st.markdown(f"""
     [data-testid="stSidebar"] {{ background-color: #111111; border-right: 1px solid #333; }}
     .stMarkdown p, label p, .stHeader h1, .stHeader h2, .stExpander p, .stAlert p {{ color: #FFFFFF !important; }}
     .stTextInput>div>div>input {{ background-color: #FFFFFF !important; color: #000000 !important; }}
-    div.stButton > button {{ background-color: #FFCC00 !important; color: #000000 !important; font-weight: bold !important; min-width: 170px !important; }}
+    div.stButton > button {{ background-color: #FFCC00 !important; color: #000000 !important; font-weight: bold !important; min-width: 100% !important; }}
     .nav-active > div > button {{ background-color: #FFFFFF !important; border: 2px solid #FFCC00 !important; }}
     .red-btn > div > button {{ background-color: #DD0000 !important; color: white !important; }}
     .green-btn > div > button {{ background-color: #28a745 !important; color: white !important; }}
+    .calc-btn > div > button {{ background-color: #444444 !important; color: white !important; min-width: 40px !important; }}
     .user-info {{ font-family: monospace; color: #FFCC00; font-size: 12px; margin-bottom: 10px; }}
     [data-testid="stDataFrame"] *, [data-testid="stTable"] * {{ color: inherit !important; }}
     </style>
@@ -64,26 +65,74 @@ def obtener_stock_dict(local_id):
         return df.groupby("id_producto")["cantidad"].sum().to_dict()
     except: return {}
 
-# --- 5. PANTALLAS ---
+# --- 5. COMPONENTE CALCULADORA ---
+def calculadora_basica():
+    if "calc_val" not in st.session_state: st.session_state.calc_val = ""
+    
+    st.markdown("### 🧮 Calculadora")
+    st.text_input("Expresión:", value=st.session_state.calc_val, disabled=True)
+    
+    cols = st.columns(4)
+    btns = ["7", "8", "9", "/", "4", "5", "6", "*", "1", "2", "3", "-", "0", ".", "C", "+"]
+    
+    for i, b in enumerate(btns):
+        with cols[i % 4]:
+            if st.button(b, key=f"btn_{b}_{i}"):
+                if b == "C": st.session_state.calc_val = ""
+                else: st.session_state.calc_val += b
+                st.rerun()
+    
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("BORRAR ⬅️"):
+            st.session_state.calc_val = st.session_state.calc_val[:-1]
+            st.rerun()
+    with c2:
+        if st.button("LISTO (Enter)", type="primary"):
+            try:
+                # Evaluamos la expresión matemática
+                res = float(eval(st.session_state.calc_val))
+                st.session_state.resultado_calc = res
+                st.session_state.show_calc = False
+                st.session_state.calc_val = ""
+                st.rerun()
+            except:
+                st.error("Error en cálculo")
+
+# --- 6. PANTALLAS ---
 def ingreso_inventario_pantalla(local_id, user_key):
     st.header("📋 Ingreso de Inventario")
     if 'carritos' not in st.session_state: st.session_state.carritos = {}
     if user_key not in st.session_state.carritos: st.session_state.carritos[user_key] = []
-    
+    if 'show_calc' not in st.session_state: st.session_state.show_calc = False
+    if 'resultado_calc' not in st.session_state: st.session_state.resultado_calc = 0.0
+
     res = supabase.table("productos_maestro").select("*").execute().data
     if not res: return
-    # Creamos el mapa de opciones directamente para el selectbox
     prod_map = {f"{p['nombre']} | {p['formato_medida']}": p for p in res}
     opciones = sorted(list(prod_map.keys()))
     
-    # Única barra de selección (ya permite buscar escribiendo)
     sel = st.selectbox("Selecciona o busca el producto:", [""] + opciones)
     
     if sel:
         p = prod_map[sel]
-        c1, c2 = st.columns(2)
+        c1, c2, c3 = st.columns([2, 2, 1])
         with c1: ubi = st.selectbox("Ubicación:", ["Bodega", "Frío", "Cocina", "Producción"])
-        with c2: cant = st.number_input("Cantidad:", min_value=0.0, step=1.0)
+        with c2: 
+            # El valor por defecto es el resultado de la calculadora si se usó
+            cant = st.number_input("Cantidad:", min_value=0.0, step=1.0, value=st.session_state.resultado_calc)
+        with c3:
+            st.write("") # Espaciado
+            st.write("") 
+            if st.button("🧮"):
+                st.session_state.show_calc = not st.session_state.show_calc
+                st.rerun()
+
+        # Mostrar calculadora si el botón fue presionado
+        if st.session_state.show_calc:
+            with st.expander("Panel de Cálculo", expanded=True):
+                calculadora_basica()
+
         if st.button("Añadir a inventario"):
             st.session_state.carritos[user_key].append({
                 "id_producto": p['id'], "Producto": p['nombre'], "Ubicación": ubi, 
@@ -91,6 +140,8 @@ def ingreso_inventario_pantalla(local_id, user_key):
                 "Factor": extraer_valor_formato(p['formato_medida'])
             })
             st.toast(f"✅ Añadido: {p['nombre']}")
+            # Resetear el resultado de la calculadora para el siguiente producto
+            st.session_state.resultado_calc = 0.0
 
     if st.session_state.carritos[user_key]:
         df = pd.DataFrame(st.session_state.carritos[user_key])
@@ -136,49 +187,29 @@ def admin_maestro(local_id):
         if up and st.button("Procesar Archivo"):
             try:
                 df_up = pd.read_csv(up) if up.name.endswith('.csv') else pd.read_excel(up)
-                mapeo = {
-                    "Número de artículo": "sku",
-                    "Descripción del artículo": "nombre",
-                    "Categoria": "categoria"
-                }
+                mapeo = {"Número de artículo": "sku", "Descripción del artículo": "nombre", "Categoria": "categoria"}
                 df_up = df_up.rename(columns=mapeo)
-                
-                if 'formato_medida' not in df_up.columns:
-                    df_up['formato_medida'] = "1 unidad"
-                else:
-                    df_up['formato_medida'] = df_up['formato_medida'].astype(str).apply(
-                        lambda x: f"{x} unidad" if x.isdigit() else x
-                    )
-                
+                if 'formato_medida' not in df_up.columns: df_up['formato_medida'] = "1 unidad"
+                else: df_up['formato_medida'] = df_up['formato_medida'].astype(str).apply(lambda x: f"{x} unidad" if x.isdigit() else x)
                 columnas_validas = ['sku', 'nombre', 'categoria', 'formato_medida']
                 df_final = df_up[[c for c in columnas_validas if c in df_up.columns]]
-                
                 supabase.table("productos_maestro").upsert(df_final.to_dict(orient='records'), on_conflict="sku").execute()
                 st.success("✅ Carga masiva completada"); st.rerun()
-            except Exception as e: 
-                st.error(f"Error: {e}")
+            except Exception as e: st.error(f"Error: {e}")
 
     res = supabase.table("productos_maestro").select("*").execute().data
     if res:
         st_dict = obtener_stock_dict(local_id)
         df_m = pd.DataFrame(res)
         df_m['Stock Actual'] = df_m.apply(lambda r: round(st_dict.get(r['id'], 0) / extraer_valor_formato(r['formato_medida']), 2), axis=1)
-        
         ed = st.data_editor(df_m, column_config={"id": None}, num_rows="dynamic", use_container_width=True)
-        
         if st.button("💾 Guardar Cambios"):
             for i, row in ed.iterrows():
                 orig = df_m.iloc[i] if i < len(df_m) else None
-                supabase.table("productos_maestro").upsert({
-                    "id": row['id'], "sku": row['sku'], "nombre": row['nombre'], 
-                    "categoria": row['categoria'], "formato_medida": row['formato_medida']
-                }).execute()
+                supabase.table("productos_maestro").upsert({"id": row['id'], "sku": row['sku'], "nombre": row['nombre'], "categoria": row['categoria'], "formato_medida": row['formato_medida']}).execute()
                 if orig is not None and row['Stock Actual'] != orig['Stock Actual']:
                     diff = (row['Stock Actual'] - orig['Stock Actual']) * extraer_valor_formato(row['formato_medida'])
-                    supabase.table("movimientos_inventario").insert({
-                        "id_local": local_id, "id_producto": row['id'], 
-                        "cantidad": diff, "tipo_movimiento": "AJUSTE", "ubicacion": "Corrección Maestro"
-                    }).execute()
+                    supabase.table("movimientos_inventario").insert({"id_local": local_id, "id_producto": row['id'], "cantidad": diff, "tipo_movimiento": "AJUSTE", "ubicacion": "Corrección Maestro"}).execute()
             st.success("Cambios guardados"); st.rerun()
 
 def admin_usuarios(locales):
@@ -216,7 +247,7 @@ def admin_usuarios(locales):
                 supabase.table("usuarios_sistema").delete().eq("usuario", u_sel).execute(); st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 6. MAIN ---
+# --- 7. MAIN ---
 def main():
     sync_session()
     if 'auth_user' not in st.session_state:
