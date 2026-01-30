@@ -48,6 +48,13 @@ st.markdown(f"""
     .red-btn > div > button {{ background-color: #DD0000 !important; color: white !important; }}
     .green-btn > div > button {{ background-color: #28a745 !important; color: white !important; }}
     .user-info {{ font-family: monospace; color: #FFCC00; font-size: 12px; margin-bottom: 10px; }}
+
+    /* AJUSTE PARA ESCRITORIO: Evita que la calculadora sea gigante */
+    iframe {{
+        max-width: 450px !important;
+        display: block;
+        margin: 0 auto;
+    }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -70,7 +77,7 @@ def obtener_stock_dict(local_id):
         return df.groupby("id_producto")["cantidad"].sum().to_dict()
     except: return {}
 
-# --- 5. COMPONENTE CALCULADORA (LA QUE MANTENEMOS) ---
+# --- 5. COMPONENTE CALCULADORA ---
 def calculadora_basica():
     calc_html = """
     <div id="calc-container" style="background: #000; padding: 10px; border-radius: 15px; width: 100%; box-sizing: border-box; font-family: sans-serif;">
@@ -138,13 +145,17 @@ def calculadora_basica():
     </script>
     """
     
-    # Renderizado de la calculadora con altura suficiente para móviles
-    resultado = components.html(calc_html, height=500, scrolling=False)
+    # Renderizado con altura fija y sin scroll
+    resultado = components.html(calc_html, height=520, scrolling=False)
     
+    # SOLUCIÓN AL TYPEERROR: Solo procesar si resultado tiene un valor
     if resultado is not None:
-        st.session_state.resultado_calc = float(resultado)
-        st.session_state.show_calc = False
-        st.rerun()
+        try:
+            st.session_state.resultado_calc = float(resultado)
+            st.session_state.show_calc = False
+            st.rerun()
+        except (ValueError, TypeError):
+            pass
 
 # --- 6. PANTALLAS ---
 def ingreso_inventario_pantalla(local_id, user_key):
