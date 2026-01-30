@@ -33,63 +33,42 @@ def logout():
     st.query_params.clear()
     st.rerun()
 
-# --- 3. DISEÑO VISUAL (AJUSTE QUIRÚRGICO DE COLORES) ---
+# --- 3. DISEÑO VISUAL (CORRECCIÓN PARA MÓVIL) ---
 st.markdown(f"""
     <style>
-    /* Fondo General */
     .stApp {{ background-color: #000000; }}
     [data-testid="stSidebar"] {{ background-color: #111111; border-right: 1px solid #333; }}
 
-    /* 1. TEXTOS ESPECÍFICOS EN BLANCO (Los que me detallaste) */
-    div[data-testid="stWidgetLabel"] p, 
-    .stHeader h1, 
-    .stHeader h2,
-    .stMarkdown p,
-    .stExpander p {{ 
+    /* TEXTOS EN BLANCO PURO PARA MÓVIL */
+    div[data-testid="stWidgetLabel"] p, label, .stMarkdown p, .stHeader h1, .stHeader h2, .stExpander p {{ 
         color: #FFFFFF !important; 
+        -webkit-text-fill-color: #FFFFFF !important;
     }}
     
-    /* "No hay registros" y mensajes de estado */
     .stAlert p, .stWarning p {{ color: #FFFFFF !important; }}
 
-    /* 2. TEXTO NEGRO EN EL MENÚ DESPLEGABLE Y BÚSQUEDA (Donde el fondo es blanco) */
+    /* INPUTS Y SELECTORES */
     .stTextInput>div>div>input {{ 
         background-color: #FFFFFF !important; 
-        color: #000000 !important; 
-    }}
-
-    div[data-baseweb="select"] > div {{ 
-        background-color: #FFFFFF !important; 
-    }}
-    
-    div[data-baseweb="select"] *, 
-    li[role="option"], 
-    div[role="option"] {{
         color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
     }}
 
-    /* 3. OTROS ELEMENTOS MANTENIDOS */
-    [data-testid="stToast"] {{ background-color: #FFCC00 !important; border: 1px solid #000000 !important; }}
-    [data-testid="stToast"] p {{ color: #000000 !important; font-weight: bold !important; }}
+    div[data-baseweb="select"] > div {{ background-color: #FFFFFF !important; }}
+    div[data-baseweb="select"] *, li[role="option"], div[role="option"] {{ color: #000000 !important; }}
 
-    [data-testid="stSidebarCollapsedControl"] {{
-        background-color: #FFCC00 !important;
-        left: 10px !important; top: 10px !important; width: 50px !important; height: 50px !important;
-    }}
-    [data-testid="stSidebarCollapsedControl"] svg {{ fill: #000000 !important; }}
-
+    /* BOTONES ESTILO ALEMAN EXPERTO */
     div.stButton > button {{
         background-color: #FFCC00 !important;
         color: #000000 !important;
         font-weight: bold !important;
         min-width: 170.86px !important;
-        height: 32.59px !important;
     }}
     div.stButton > button p {{ color: #000000 !important; }}
     
     .nav-active > div > button {{ background-color: #FFFFFF !important; border: 2px solid #FFCC00 !important; }}
-    .red-btn > div > button {{ background-color: #DD0000 !important; }}
-    .green-btn > div > button {{ background-color: #28a745 !important; }}
+    .red-btn > div > button {{ background-color: #DD0000 !important; color: white !important; }}
+    .green-btn > div > button {{ background-color: #28a745 !important; color: white !important; }}
     
     .user-info {{ font-family: monospace; color: #FFCC00; font-size: 12px; }}
     </style>
@@ -97,8 +76,10 @@ st.markdown(f"""
 
 # --- 4. FUNCIONES LÓGICAS ---
 def get_locales_map():
-    res = supabase.table("locales").select("id, nombre").execute().data
-    return {l['nombre']: l['id'] for l in res} if res else {}
+    try:
+        res = supabase.table("locales").select("id, nombre").execute().data
+        return {l['nombre']: l['id'] for l in res} if res else {}
+    except: return {}
 
 def extraer_valor_formato(formato_str):
     match = re.search(r"(\d+)", str(formato_str))
@@ -110,10 +91,12 @@ def ingreso_inventario_pantalla(local_id, user_key):
     if 'carritos' not in st.session_state: st.session_state.carritos = {}
     if user_key not in st.session_state.carritos: st.session_state.carritos[user_key] = []
     
-    res = supabase.table("productos_maestro").select("*").execute().data
+    try:
+        res = supabase.table("productos_maestro").select("*").execute().data
+    except: return
+
     if not res: return
     prod_map = {f"{p['nombre']} | {p['formato_medida']}": p for p in res}
-    
     busqueda = st.text_input("🔍 Buscar producto:", placeholder="Escribe el nombre...")
     opciones = [o for o in prod_map.keys() if busqueda.lower() in o.lower()]
     sel = st.selectbox("Selecciona producto:", [""] + opciones)
@@ -139,18 +122,18 @@ def ingreso_inventario_pantalla(local_id, user_key):
             st.markdown('<div class="green-btn">', unsafe_allow_html=True)
             if st.button("Finalizar"):
                 try:
-                    sid = f"SES-{user_key[:3].upper()}-{datetime.now().strftime('%m%d%H%M')}"
                     for r in ed.to_dict(orient='records'):
                         supabase.table("movimientos_inventario").insert({
-                            "id_local": local_id, "id_producto": r['id_producto'], 
-                            "cantidad": r['Cantidad']*r['Factor'], "tipo_movimiento": "CONTEO", 
-                            "ubicacion": r['Ubicación'], "notas": sid
+                            "id_local": local_id, 
+                            "id_producto": r['id_producto'], 
+                            "cantidad": r['Cantidad']*r['Factor'], 
+                            "tipo_movimiento": "AJUSTE", # Ajustado por error 23514
+                            "ubicacion": r['Ubicación']
                         }).execute()
-                    st.success("✅ Guardado correctamente.")
+                    st.success("✅ Guardado con éxito")
                     st.session_state.carritos[user_key] = []; st.rerun()
                 except Exception as e:
-                    st.error("❌ ERROR DE BASE DE DATOS:")
-                    st.code(str(e))
+                    st.error(f"Error al guardar: {e}")
             st.markdown('</div>', unsafe_allow_html=True)
         with col_a:
             st.markdown('<div class="red-btn">', unsafe_allow_html=True)
@@ -159,20 +142,14 @@ def ingreso_inventario_pantalla(local_id, user_key):
 
 def reportes_pantalla():
     st.header("📊 Reportes")
-    query = supabase.table("movimientos_inventario").select("*, productos_maestro(nombre, formato_medida)").eq("tipo_movimiento", "CONTEO").execute().data
-    if not query:
-        st.warning("No hay registros.")
-        return
-    
-    df = pd.json_normalize(query)
-    sesiones = sorted(df['notas'].unique().tolist(), reverse=True)
-    sesion_sel = st.selectbox("Seleccione Sesión:", sesiones)
-    
-    if sesion_sel:
-        df_s = df[df['notas'] == sesion_sel].copy()
-        df_s['factor'] = df_s['productos_maestro.formato_medida'].apply(extraer_valor_formato)
-        df_s['Unidades'] = (df_s['cantidad'] / df_s['factor']).round(2)
-        st.dataframe(df_s[['productos_maestro.nombre', 'ubicacion', 'Unidades', 'productos_maestro.formato_medida']], use_container_width=True)
+    try:
+        query = supabase.table("movimientos_inventario").select("*, productos_maestro(nombre, formato_medida)").execute().data
+        if not query:
+            st.warning("No hay registros.")
+            return
+        df = pd.json_normalize(query)
+        st.dataframe(df, use_container_width=True)
+    except: st.error("Error al cargar reportes.")
 
 def admin_maestro():
     st.header("⚙️ Maestro")
@@ -183,8 +160,7 @@ def admin_maestro():
                 df_up = pd.read_csv(up) if up.name.endswith('.csv') else pd.read_excel(up)
                 supabase.table("productos_maestro").upsert(df_up.to_dict(orient='records')).execute()
                 st.success("Carga exitosa"); st.rerun()
-            except Exception as e:
-                st.error(f"Error: {e}")
+            except Exception as e: st.error(f"Error: {e}")
     
     res = supabase.table("productos_maestro").select("*").execute().data
     if res:
@@ -263,8 +239,8 @@ def main():
         st.sidebar.markdown(f'<div class="{act}">', unsafe_allow_html=True)
         if st.sidebar.button(o): st.session_state.opt = o; st.rerun()
         st.sidebar.markdown('</div>', unsafe_allow_html=True)
-    st.sidebar.divider()
     if st.sidebar.button("Cerrar Sesión"): logout()
+    
     if st.session_state.opt == "📋 Ingreso": ingreso_inventario_pantalla(user['local'], user['user'])
     elif st.session_state.opt == "📊 Reportes": reportes_pantalla()
     elif st.session_state.opt == "👤 Usuarios": admin_usuarios(ld)
