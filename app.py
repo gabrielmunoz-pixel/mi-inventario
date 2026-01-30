@@ -29,13 +29,14 @@ def logout():
     st.query_params.clear()
     st.rerun()
 
-# --- 3. DISEÑO VISUAL (ADAPTACIÓN TOTAL AL CONTENEDOR) ---
+# --- 3. DISEÑO VISUAL (GRID INDESTRUCTIBLE) ---
 st.markdown(f"""
     <style>
     .stApp {{ background-color: #000000; }}
     [data-testid="stSidebar"] {{ background-color: #111111; border-right: 1px solid #333; }}
     .stMarkdown p, label p, .stHeader h1, .stHeader h2, .stExpander p, .stAlert p {{ color: #FFFFFF !important; }}
     
+    /* Botones generales */
     div.stButton > button {{ 
         background-color: #FFCC00 !important; 
         color: #000000 !important; 
@@ -43,44 +44,44 @@ st.markdown(f"""
         border-radius: 10px !important;
     }}
 
-    /* --- FIX DEFINITIVO MATRIZ 4X4 EN PANEL --- */
-    .calc-container {{
-        width: 100%;
-        max-width: 100%;
-        margin: 0;
+    /* --- CONTENEDOR DE CALCULADORA --- */
+    /* Forzamos que el contenido del expander no tenga márgenes locos */
+    [data-testid="stExpander"] [data-testid="stVerticalBlock"] {{
+        gap: 0rem !important;
     }}
 
-    /* Forzamos que las columnas no se apilen nunca dentro de la calculadora */
-    [data-testid="stExpander"] div[data-testid="stHorizontalBlock"] {{
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: nowrap !important;
-        gap: 4px !important;
+    /* ESTILO DE LA MATRIZ 4x4 USANDO CSS GRID */
+    .grid-calculadora {{
+        display: grid !important;
+        grid-template-columns: repeat(4, 1fr) !important; /* 4 columnas iguales siempre */
+        gap: 8px !important;
         width: 100% !important;
+        margin: 0 auto !important;
     }}
 
-    [data-testid="stExpander"] div[data-testid="column"] {{
-        flex: 1 1 25% !important;
-        min-width: 0 !important;
-        width: 25% !important;
-    }}
-
-    .calc-container button {{
+    /* Estilo de los botones dentro del Grid */
+    .grid-calculadora button {{
         aspect-ratio: 1 / 1 !important;
-        height: auto !important;
         width: 100% !important;
+        height: auto !important;
+        font-size: 22px !important;
         padding: 0 !important;
-        font-size: clamp(14px, 4vw, 22px) !important; /* Tamaño de fuente responsivo */
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
     }}
 
-    .calc-btn-num button {{ background-color: #FFCC00 !important; color: #000000 !important; }}
-    .calc-btn-op button {{ background-color: #333333 !important; color: #FFCC00 !important; border: 1px solid #FFCC00 !important; }}
-    .calc-btn-clear button {{ background-color: #440000 !important; color: white !important; }}
-    .calc-enter button {{ background-color: #1A73E8 !important; color: white !important; height: 45px !important; aspect-ratio: auto !important; }}
+    .btn-num button {{ background-color: #FFCC00 !important; color: #000000 !important; }}
+    .btn-op button {{ background-color: #333333 !important; color: #FFCC00 !important; border: 1px solid #FFCC00 !important; }}
+    .btn-clear button {{ background-color: #440000 !important; color: white !important; }}
 
+    /* Botón LISTO más grande abajo */
+    .calc-footer {{
+        margin-top: 15px;
+        display: flex;
+        gap: 10px;
+    }}
+    
     .nav-active > div > button {{ background-color: #FFFFFF !important; border: 2px solid #FFCC00 !important; }}
     .red-btn > div > button {{ background-color: #DD0000 !important; color: white !important; }}
     .green-btn > div > button {{ background-color: #28a745 !important; color: white !important; }}
@@ -107,60 +108,62 @@ def obtener_stock_dict(local_id):
         return df.groupby("id_producto")["cantidad"].sum().to_dict()
     except: return {}
 
-# --- 5. COMPONENTE CALCULADORA ---
+# --- 5. COMPONENTE CALCULADORA (REDiseñado con DIVs de GRID) ---
 def calculadora_basica():
     if "calc_val" not in st.session_state: st.session_state.calc_val = ""
     
-    st.markdown('<div class="calc-container">', unsafe_allow_html=True)
-    
+    # Pantalla de la calculadora
     st.markdown(f"""
-        <div style="background:#1e1e1e; color:#00ff00; padding:10px; border-radius:10px; 
-        text-align:right; font-family:monospace; font-size:24px; margin-bottom:10px; border:2px solid #333; min-height:50px;">
+        <div style="background:#1e1e1e; color:#00ff00; padding:15px; border-radius:10px; 
+        text-align:right; font-family:monospace; font-size:32px; margin-bottom:15px; border:2px solid #333;">
             {st.session_state.calc_val if st.session_state.calc_val else "0"}
         </div>
     """, unsafe_allow_html=True)
     
-    filas = [
-        [("7", "num"), ("8", "num"), ("9", "num"), ("/", "op")],
-        [("4", "num"), ("5", "num"), ("6", "num"), ("*", "op")],
-        [("1", "num"), ("2", "num"), ("3", "num"), ("-", "op")],
-        [("0", "num"), (".", "num"), ("C", "clear"), ("+", "op")]
+    # Definición de botones en orden de grid
+    botones = [
+        ("7", "num"), ("8", "num"), ("9", "num"), ("/", "op"),
+        ("4", "num"), ("5", "num"), ("6", "num"), ("*", "op"),
+        ("1", "num"), ("2", "num"), ("3", "num"), ("-", "op"),
+        ("0", "num"), (".", "num"), ("C", "clear"), ("+", "op")
     ]
     
-    for fila in filas:
-        cols = st.columns(4)
-        for i, (label, tipo) in enumerate(fila):
-            with cols[i]:
-                st.markdown(f'<div class="calc-btn-{tipo}">', unsafe_allow_html=True)
-                if st.button(label, key=f"btn_{label}_{filas.index(fila)}", use_container_width=True):
-                    if label == "C": st.session_state.calc_val = ""
-                    else: st.session_state.calc_val += label
-                    st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
+    # Creamos el contenedor Grid
+    st.markdown('<div class="grid-calculadora">', unsafe_allow_html=True)
+    # IMPORTANTE: Usamos columnas vacías de Streamlit solo como anclaje, 
+    # pero el CSS Grid las obligará a comportarse.
+    cols = st.columns(4) 
     
-    st.write("")
+    for i, (label, tipo) in enumerate(botones):
+        # Usamos el operador módulo para rotar entre las 4 columnas
+        with cols[i % 4]:
+            st.markdown(f'<div class="btn-{tipo}">', unsafe_allow_html=True)
+            if st.button(label, key=f"grid_btn_{label}_{i}"):
+                if label == "C": st.session_state.calc_val = ""
+                else: st.session_state.calc_val += label
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Botones de acción inferior
+    st.markdown('<div class="calc-footer">', unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     with c1:
         if st.button("⬅️ Borrar", use_container_width=True):
             st.session_state.calc_val = st.session_state.calc_val[:-1]
             st.rerun()
     with c2:
-        st.markdown('<div class="calc-enter">', unsafe_allow_html=True)
         if st.button("LISTO", type="primary", use_container_width=True):
             try:
                 if st.session_state.calc_val:
-                    res = float(eval(st.session_state.calc_val))
-                    st.session_state.resultado_calc = res
+                    st.session_state.resultado_calc = float(eval(st.session_state.calc_val))
                     st.session_state.show_calc = False
                     st.session_state.calc_val = ""
                     st.rerun()
-            except:
-                st.error("Error")
-        st.markdown('</div>', unsafe_allow_html=True)
-    
+            except: st.error("Error")
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 6. PANTALLAS ---
+# --- 6. PANTALLAS --- (Todo igual que tu original)
 def ingreso_inventario_pantalla(local_id, user_key):
     st.header("📋 Ingreso de Inventario")
     if 'carritos' not in st.session_state: st.session_state.carritos = {}
@@ -183,7 +186,7 @@ def ingreso_inventario_pantalla(local_id, user_key):
             cant = st.number_input("Cantidad:", min_value=0.0, step=1.0, value=float(st.session_state.resultado_calc))
         with c3:
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("🧮", help="Abrir calculadora"):
+            if st.button("🧮"):
                 st.session_state.show_calc = not st.session_state.show_calc
                 st.rerun()
 
