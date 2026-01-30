@@ -6,7 +6,7 @@ from datetime import datetime
 from supabase import create_client, Client
 import streamlit.components.v1 as components
 
-# --- 1. CONEXIÓN ---
+# --- 1. CONEXIÓN (Mantenido igual) ---
 try:
     URL = st.secrets["SUPABASE_URL"]
     KEY = st.secrets["SUPABASE_KEY"]
@@ -15,7 +15,7 @@ except:
     st.error("Error de conexión con Supabase.")
     st.stop()
 
-# --- 2. GESTIÓN DE SESIÓN ---
+# --- 2. GESTIÓN DE SESIÓN (Mantenido igual) ---
 def sync_session():
     params = st.query_params
     if "user_data" in params and "auth_user" not in st.session_state:
@@ -30,7 +30,7 @@ def logout():
     st.query_params.clear()
     st.rerun()
 
-# --- 3. DISEÑO VISUAL ---
+# --- 3. DISEÑO VISUAL (Mantenido igual) ---
 st.markdown(f"""
     <style>
     .stApp {{ background-color: #000000; }}
@@ -57,7 +57,7 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 4. FUNCIONES LÓGICAS ---
+# --- 4. FUNCIONES LÓGICAS (Mantenido igual) ---
 def get_locales_map():
     try:
         res = supabase.table("locales").select("id, nombre").execute().data
@@ -76,7 +76,7 @@ def obtener_stock_dict(local_id):
         return df.groupby("id_producto")["cantidad"].sum().to_dict()
     except: return {}
 
-# --- 5. COMPONENTE CALCULADORA ---
+# --- 5. COMPONENTE CALCULADORA (MODIFICADO) ---
 def calculadora_basica():
     calc_html = """
     <div id="calc-container" style="background: #000; padding: 10px; border-radius: 15px; width: 100%; box-sizing: border-box; font-family: sans-serif;">
@@ -100,12 +100,12 @@ def calculadora_basica():
             
             <button onclick="press('0')" style="aspect-ratio: 1; background: #FFCC00; border: none; border-radius: 10px; font-size: 20px; font-weight: bold;">0</button>
             <button onclick="press('.')" style="aspect-ratio: 1; background: #FFCC00; border: none; border-radius: 10px; font-size: 20px; font-weight: bold;">.</button>
-            <button onclick="clearCalc()" style="aspect-ratio: 1; background: #440000; color: white; border: none; border-radius: 10px; font-size: 20px;">C</button>
+            <button onclick="solve()" style="aspect-ratio: 1; background: #1A73E8; color: white; border: none; border-radius: 10px; font-size: 20px; font-weight: bold;">=</button>
             <button onclick="press('+')" style="aspect-ratio: 1; background: #333; color: #FFCC00; border: 1px solid #FFCC00; border-radius: 10px; font-size: 20px;">+</button>
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px;">
-            <button onclick="backspace()" style="padding: 15px; background: #333; color: white; border: none; border-radius: 10px; font-size: 16px;">⬅ Borrar</button>
+            <button onclick="clearCalc()" style="padding: 15px; background: #440000; color: white; border: none; border-radius: 10px; font-size: 16px;">C (Limpiar)</button>
             <button onclick="sendResult()" style="padding: 15px; background: #1A73E8; color: white; border: none; border-radius: 10px; font-size: 16px; font-weight: bold;">LISTO</button>
         </div>
     </div>
@@ -124,21 +124,27 @@ def calculadora_basica():
             display.innerText = "0";
         }
 
-        function backspace() {
-            current = current.slice(0, -1);
-            display.innerText = current || "0";
+        function solve() {
+            try {
+                if(current === "") return;
+                current = eval(current).toString();
+                display.innerText = current;
+            } catch (e) {
+                display.innerText = "Error";
+                current = "";
+            }
         }
 
         function sendResult() {
             try {
-                let result = eval(current);
+                // Forzar el cálculo antes de enviar por si no apretaron "="
+                let finalVal = eval(current);
                 window.parent.postMessage({
                     type: "streamlit:setComponentValue",
-                    value: result
+                    value: finalVal
                 }, "*");
             } catch (e) {
-                display.innerText = "Error";
-                current = "";
+                console.log("Error al enviar");
             }
         }
     </script>
@@ -146,16 +152,12 @@ def calculadora_basica():
     
     resultado = components.html(calc_html, height=520, scrolling=False)
     
-    # Cambio lógico: Si hay un resultado de la calculadora, actualizamos la sesión y cerramos
     if resultado is not None:
-        try:
-            st.session_state.resultado_calc = float(resultado)
-            st.session_state.show_calc = False
-            st.rerun()
-        except:
-            pass
+        st.session_state.resultado_calc = float(resultado)
+        st.session_state.show_calc = False
+        st.rerun()
 
-# --- 6. PANTALLAS ---
+# --- 6. PANTALLAS (MODIFICADO SOLO INGRESO) ---
 def ingreso_inventario_pantalla(local_id, user_key):
     st.header("📋 Ingreso de Inventario")
     if 'carritos' not in st.session_state: st.session_state.carritos = {}
@@ -175,7 +177,7 @@ def ingreso_inventario_pantalla(local_id, user_key):
         c1, c2, c3 = st.columns([2, 2, 0.6])
         with c1: ubi = st.selectbox("Ubicación:", ["Bodega", "Frío", "Cocina", "Producción"])
         with c2: 
-            # El valor del input ahora está amarrado al resultado de la calculadora
+            # Captura el valor que viene de la calculadora
             cant = st.number_input("Cantidad:", min_value=0.0, step=1.0, value=float(st.session_state.resultado_calc))
         with c3:
             st.markdown("<br>", unsafe_allow_html=True)
@@ -194,11 +196,9 @@ def ingreso_inventario_pantalla(local_id, user_key):
                 "Factor": extraer_valor_formato(p['formato_medida'])
             })
             st.toast(f"✅ Añadido: {p['nombre']}")
-            # Limpiamos el resultado después de añadir al carrito
-            st.session_state.resultado_calc = 0.0
+            st.session_state.resultado_calc = 0.0 # Resetear valor para el próximo producto
             st.rerun()
 
-    # El resto del código de tablas y botones de finalizar/borrar se mantiene exactamente igual...
     if st.session_state.carritos[user_key]:
         df = pd.DataFrame(st.session_state.carritos[user_key])
         ed = st.data_editor(df, column_config={"id_producto": None, "Factor": None}, use_container_width=True)
@@ -219,7 +219,7 @@ def ingreso_inventario_pantalla(local_id, user_key):
             if st.button("🗑️ BORRAR"): st.session_state.carritos[user_key] = []; st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
 
-# Las funciones de reportes, admin_maestro, admin_usuarios y main se mantienen idénticas...
+# --- RESTO DEL CÓDIGO (Reportes, Admin, Main) MANTENIDO IGUAL ---
 def reportes_pantalla(local_id):
     st.header("📊 Reportes")
     t1, t2 = st.tabs(["🕒 Historial", "📦 Stock Actual"])
