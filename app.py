@@ -70,7 +70,7 @@ def obtener_stock_dict(local_id):
     except: 
         return {}
 
-# 5. COMPONENTE CALCULADORA (El "Original" con JS mejorado para Streamlit)
+# 5. COMPONENTE CALCULADORA
 def calculadora_basica():
     calc_html = """
     <div id="calc-container" style="background: #000; padding: 10px; border-radius: 15px; font-family: sans-serif;">
@@ -124,18 +124,14 @@ def calculadora_basica():
     """
     return components.html(calc_html, height=400)
 
-# 6. PANTALLA INGRESO (SOLUCIÓN AL ERROR DE SINCRONIZACIÓN)
+# 6. PANTALLA INGRESO
 def ingreso_inventario_pantalla(local_id, user_key):
     st.header("📋 Ingreso de Inventario")
     
-    # Inicialización de estados
     if 'carritos' not in st.session_state: st.session_state.carritos = {}
     if user_key not in st.session_state.carritos: st.session_state.carritos[user_key] = []
     if 'show_calc' not in st.session_state: st.session_state.show_calc = False
-    
-    # Buffer de valor para desacoplar el iframe del widget nativo
-    if 'temp_cant' not in st.session_state:
-        st.session_state.temp_cant = 0.0
+    if 'resultado_calc' not in st.session_state: st.session_state.resultado_calc = 0.0
 
     res = supabase.table("productos_maestro").select("*").execute().data
     if not res: return
@@ -151,16 +147,13 @@ def ingreso_inventario_pantalla(local_id, user_key):
             ubi = st.selectbox("Ubicación:", ["Bodega", "Frío", "Cocina", "Producción"])
         
         with c2:
-            # El widget nativo ahora lee del buffer temp_cant
-            # Usamos una key estática para evitar que se destruya el widget innecesariamente
+            # Usamos el valor de session_state para mantener la sincronización
             cant = st.number_input(
                 "Cantidad:", 
                 min_value=0.0, 
-                value=float(st.session_state.temp_cant), 
-                key="input_cantidad_fijo"
+                value=float(st.session_state.resultado_calc),
+                key=f"input_{st.session_state.resultado_calc}" # Key dinámica controlada
             )
-            # Actualizamos el buffer con lo que el usuario escriba a mano
-            st.session_state.temp_cant = cant
 
         with c3:
             st.markdown("<br>", unsafe_allow_html=True)
@@ -168,30 +161,33 @@ def ingreso_inventario_pantalla(local_id, user_key):
                 st.session_state.show_calc = not st.session_state.show_calc
                 st.rerun()
 
-        # Lógica de la calculadora
         if st.session_state.show_calc:
             with st.expander("Calculadora", expanded=True):
                 calc_val = calculadora_basica()
-                # Solo procesamos si el componente envió un valor real (not None)
+                
+                # PARCHE CRÍTICO: Validación de tipo para evitar TypeError
                 if calc_val is not None:
-                    st.session_state.temp_cant = float(calc_val)
-                    st.session_state.show_calc = False
-                    st.rerun()
+                    try:
+                        # Si calc_val es un dict (pasa a veces con custom components), extraemos el valor
+                        val_to_set = float(calc_val) if not isinstance(calc_val, dict) else float(calc_val.get('value', 0))
+                        st.session_state.resultado_calc = val_to_set
+                        st.session_state.show_calc = False
+                        st.rerun()
+                    except (ValueError, TypeError):
+                        pass
 
         if st.button("Añadir a la lista"):
             st.session_state.carritos[user_key].append({
                 "id_producto": p['id'], 
                 "Producto": p['nombre'], 
                 "Ubicación": ubi, 
-                "Cantidad": float(st.session_state.temp_cant), 
+                "Cantidad": float(cant), 
                 "Formato": p['formato_medida'], 
                 "Factor": extraer_valor_formato(p['formato_medida'])
             })
-            # Reset del buffer tras añadir
-            st.session_state.temp_cant = 0.0
+            st.session_state.resultado_calc = 0.0
             st.rerun()
 
-    # Mostrar tabla si hay items
     if st.session_state.carritos[user_key]:
         df_c = pd.DataFrame(st.session_state.carritos[user_key])
         ed = st.data_editor(df_c, column_config={"id_producto": None, "Factor": None}, use_container_width=True)
@@ -232,6 +228,8 @@ def admin_usuarios(locales_map):
 # 10. MAIN
 def main():
     sync_session()
+    
+    # Login Form
     if 'auth_user' not in st.session_state:
         with st.form("Login"):
             u = st.text_input("Usuario")
@@ -243,23 +241,30 @@ def main():
         return
 
     user = st.session_state.auth_user
+    
+    # Sidebar
+    st.sidebar.title("Menú")
+    # Si tenías un logo, agrégalo aquí: st.sidebar.image("tu_logo.png")
+    
     if 'opt' not in st.session_state: 
         st.session_state.opt = "📋 Ingreso"
     
-    st.sidebar.title("Menú")
     if st.sidebar.button("📋 Ingreso"): 
         st.session_state.opt = "📋 Ingreso"
         st.rerun()
     if st.sidebar.button("📊 Reportes"): 
         st.session_state.opt = "📊 Reportes"
         st.rerun()
+    
     if user['role'] == "Admin":
         if st.sidebar.button("⚙️ Maestro"): 
             st.session_state.opt = "⚙️ Maestro"
             st.rerun()
+            
     if st.sidebar.button("🚪 Salir"): 
         logout()
 
+    # Routing de Pantallas
     if st.session_state.opt == "📋 Ingreso": 
         ingreso_inventario_pantalla(user['local'], user['user'])
     elif st.session_state.opt == "📊 Reportes": 
