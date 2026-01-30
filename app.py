@@ -195,7 +195,10 @@ def calculadora_basica():
         function sendResult() {
             try {
                 let val = eval(current);
-                window.parent.postMessage({type: "streamlit:setComponentValue", value: val}, "*");
+                // Solo enviamos si es un número válido
+                if (!isNaN(val)) {
+                    window.parent.postMessage({type: "streamlit:setComponentValue", value: val}, "*");
+                }
             } catch (e) {}
         }
     </script>
@@ -208,7 +211,6 @@ def calculadora_basica():
 def ingreso_inventario_pantalla(local_id, user_key):
     st.header("📋 Ingreso de Inventario")
     
-    # Inicializar estados de esta pantalla
     if 'carritos' not in st.session_state:
         st.session_state.carritos = {}
     if user_key not in st.session_state.carritos:
@@ -219,7 +221,6 @@ def ingreso_inventario_pantalla(local_id, user_key):
     if 'resultado_calc' not in st.session_state:
         st.session_state.resultado_calc = 0.0
 
-    # Cargar maestro
     res = supabase.table("productos_maestro").select("*").execute().data
     if not res:
         st.warning("No hay productos en el sistema.")
@@ -238,6 +239,8 @@ def ingreso_inventario_pantalla(local_id, user_key):
             ubi = st.selectbox("Ubicación:", ["Bodega", "Frío", "Cocina", "Producción"])
         
         with c2:
+            # --- MEJORA: KEY DINÁMICA ---
+            # Al cambiar la key según el resultado, forzamos el refresco del widget
             cant = st.number_input(
                 "Cantidad:", 
                 min_value=0.0, 
@@ -252,16 +255,14 @@ def ingreso_inventario_pantalla(local_id, user_key):
                 st.session_state.show_calc = not st.session_state.show_calc
                 st.rerun()
 
-        # Render de Calculadora si está activa
         if st.session_state.show_calc:
             with st.expander("Calculadora", expanded=True):
                 calc_val = calculadora_basica()
-                # CORRECCIÓN DEL TypeError: Verificar que no sea None antes de convertir
                 if calc_val is not None:
                     try:
                         st.session_state.resultado_calc = float(calc_val)
                         st.session_state.show_calc = False
-                        st.rerun()
+                        st.rerun() # Rerun necesario para actualizar el input con la nueva key
                     except (TypeError, ValueError):
                         pass
 
@@ -278,7 +279,6 @@ def ingreso_inventario_pantalla(local_id, user_key):
             st.session_state.resultado_calc = 0.0
             st.rerun()
 
-    # Tabla de Pre-ingreso
     if st.session_state.carritos[user_key]:
         st.subheader("🛒 Pre-ingreso")
         df_carrito = pd.DataFrame(st.session_state.carritos[user_key])
@@ -372,7 +372,6 @@ def admin_maestro(local_id):
             except Exception as e:
                 st.error(f"Error en carga: {e}")
 
-    # Editar Tabla Maestro
     res = supabase.table("productos_maestro").select("*").execute().data
     if res:
         st.subheader("Productos Registrados")
@@ -441,7 +440,6 @@ def admin_usuarios(locales_map):
 def main():
     sync_session()
 
-    # --- LOGIN ---
     if 'auth_user' not in st.session_state:
         c_l1, c_l2, c_l3 = st.columns([1, 2, 1])
         with c_l2:
@@ -466,7 +464,6 @@ def main():
                         st.error("Usuario o clave incorrectos.")
         return
 
-    # --- PANEL DE CONTROL ---
     user = st.session_state.auth_user
     locales = get_locales_map()
     locales_inv = {v: k for k, v in locales.items()}
@@ -498,7 +495,6 @@ def main():
     if st.sidebar.button("🚪 SALIR"):
         logout()
 
-    # --- RUTEADOR DE PANTALLAS ---
     if st.session_state.opt == "📋 Ingreso":
         ingreso_inventario_pantalla(user['local'], user['user'])
     elif st.session_state.opt == "📊 Reportes":
