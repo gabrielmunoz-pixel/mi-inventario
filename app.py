@@ -41,7 +41,6 @@ st.markdown(f"""
     [data-testid="stSidebar"] {{ background-color: #111111; border-right: 1px solid #333; }}
 
     /* 1. TEXTOS ESPECÍFICOS EN BLANCO (Los que me detallaste) */
-    /* "Selecciona producto", "Buscar producto", "Nombre", "Usuario", "Clave", "Sede" */
     div[data-testid="stWidgetLabel"] p, 
     .stHeader h1, 
     .stHeader h2,
@@ -54,18 +53,15 @@ st.markdown(f"""
     .stAlert p, .stWarning p {{ color: #FFFFFF !important; }}
 
     /* 2. TEXTO NEGRO EN EL MENÚ DESPLEGABLE Y BÚSQUEDA (Donde el fondo es blanco) */
-    /* Caja de búsqueda */
     .stTextInput>div>div>input {{ 
         background-color: #FFFFFF !important; 
         color: #000000 !important; 
     }}
 
-    /* Caja del selector (Selecciona producto) */
     div[data-baseweb="select"] > div {{ 
         background-color: #FFFFFF !important; 
     }}
     
-    /* Texto dentro de la caja y de la lista desplegable */
     div[data-baseweb="select"] *, 
     li[role="option"], 
     div[role="option"] {{
@@ -142,14 +138,19 @@ def ingreso_inventario_pantalla(local_id, user_key):
         with col_c:
             st.markdown('<div class="green-btn">', unsafe_allow_html=True)
             if st.button("Finalizar"):
-                sid = f"SES-{user_key[:3].upper()}-{datetime.now().strftime('%m%d%H%M')}"
-                for r in ed.to_dict(orient='records'):
-                    supabase.table("movimientos_inventario").insert({
-                        "id_local": local_id, "id_producto": r['id_producto'], 
-                        "cantidad": r['Cantidad']*r['Factor'], "tipo_movimiento": "CONTEO", 
-                        "ubicacion": r['Ubicación'], "notas": sid
-                    }).execute()
-                st.session_state.carritos[user_key] = []; st.rerun()
+                try:
+                    sid = f"SES-{user_key[:3].upper()}-{datetime.now().strftime('%m%d%H%M')}"
+                    for r in ed.to_dict(orient='records'):
+                        supabase.table("movimientos_inventario").insert({
+                            "id_local": local_id, "id_producto": r['id_producto'], 
+                            "cantidad": r['Cantidad']*r['Factor'], "tipo_movimiento": "CONTEO", 
+                            "ubicacion": r['Ubicación'], "notas": sid
+                        }).execute()
+                    st.success("✅ Guardado correctamente.")
+                    st.session_state.carritos[user_key] = []; st.rerun()
+                except Exception as e:
+                    st.error("❌ ERROR DE BASE DE DATOS:")
+                    st.code(str(e))
             st.markdown('</div>', unsafe_allow_html=True)
         with col_a:
             st.markdown('<div class="red-btn">', unsafe_allow_html=True)
