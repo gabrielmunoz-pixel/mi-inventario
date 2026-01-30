@@ -29,7 +29,7 @@ def logout():
     st.query_params.clear()
     st.rerun()
 
-# --- 3. DISEÑO VISUAL CORREGIDO (RESPONSIVO Y COMPACTO) ---
+# --- 3. DISEÑO VISUAL (ADAPTACIÓN TOTAL AL CONTENEDOR) ---
 st.markdown(f"""
     <style>
     .stApp {{ background-color: #000000; }}
@@ -43,38 +43,43 @@ st.markdown(f"""
         border-radius: 10px !important;
     }}
 
-    /* --- AJUSTE DINÁMICO CALCULADORA --- */
+    /* --- FIX DEFINITIVO MATRIZ 4X4 EN PANEL --- */
     .calc-container {{
-        max-width: 350px; /* Limita el ancho en PC para que no se deforme */
-        margin: 0 auto;   /* Centra la calculadora */
+        width: 100%;
+        max-width: 100%;
+        margin: 0;
     }}
 
-    /* Forzar matriz en cualquier pantalla */
-    div[data-testid="stHorizontalBlock"]:has(div[class^="calc-btn-"]) {{
+    /* Forzamos que las columnas no se apilen nunca dentro de la calculadora */
+    [data-testid="stExpander"] div[data-testid="stHorizontalBlock"] {{
         display: flex !important;
         flex-direction: row !important;
         flex-wrap: nowrap !important;
-        gap: 5px !important;
+        gap: 4px !important;
+        width: 100% !important;
     }}
 
-    div[data-testid="stHorizontalBlock"]:has(div[class^="calc-btn-"]) div[data-testid="column"] {{
+    [data-testid="stExpander"] div[data-testid="column"] {{
+        flex: 1 1 25% !important;
+        min-width: 0 !important;
         width: 25% !important;
-        min-width: 25% !important;
-        flex-basis: 25% !important;
     }}
 
     .calc-container button {{
-        aspect-ratio: 1 / 1 !important; /* Mantiene los botones cuadrados */
+        aspect-ratio: 1 / 1 !important;
         height: auto !important;
         width: 100% !important;
-        padding: 0px !important;
-        font-size: 20px !important;
+        padding: 0 !important;
+        font-size: clamp(14px, 4vw, 22px) !important; /* Tamaño de fuente responsivo */
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
     }}
 
     .calc-btn-num button {{ background-color: #FFCC00 !important; color: #000000 !important; }}
     .calc-btn-op button {{ background-color: #333333 !important; color: #FFCC00 !important; border: 1px solid #FFCC00 !important; }}
     .calc-btn-clear button {{ background-color: #440000 !important; color: white !important; }}
-    .calc-enter button {{ background-color: #1A73E8 !important; color: white !important; height: 50px !important; aspect-ratio: auto !important; }}
+    .calc-enter button {{ background-color: #1A73E8 !important; color: white !important; height: 45px !important; aspect-ratio: auto !important; }}
 
     .nav-active > div > button {{ background-color: #FFFFFF !important; border: 2px solid #FFCC00 !important; }}
     .red-btn > div > button {{ background-color: #DD0000 !important; color: white !important; }}
@@ -83,7 +88,7 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 4. FUNCIONES LÓGICAS --- (Sin cambios)
+# --- 4. FUNCIONES LÓGICAS ---
 def get_locales_map():
     try:
         res = supabase.table("locales").select("id, nombre").execute().data
@@ -102,18 +107,15 @@ def obtener_stock_dict(local_id):
         return df.groupby("id_producto")["cantidad"].sum().to_dict()
     except: return {}
 
-# --- 5. COMPONENTE CALCULADORA (MATRIZ AJUSTADA) ---
+# --- 5. COMPONENTE CALCULADORA ---
 def calculadora_basica():
     if "calc_val" not in st.session_state: st.session_state.calc_val = ""
     
-    st.markdown("### 🧮 Calculadora")
-    
     st.markdown('<div class="calc-container">', unsafe_allow_html=True)
     
-    # Display estilizado
     st.markdown(f"""
-        <div style="background:#1e1e1e; color:#00ff00; padding:15px; border-radius:10px; 
-        text-align:right; font-family:monospace; font-size:28px; margin-bottom:10px; border:2px solid #333;">
+        <div style="background:#1e1e1e; color:#00ff00; padding:10px; border-radius:10px; 
+        text-align:right; font-family:monospace; font-size:24px; margin-bottom:10px; border:2px solid #333; min-height:50px;">
             {st.session_state.calc_val if st.session_state.calc_val else "0"}
         </div>
     """, unsafe_allow_html=True)
@@ -158,7 +160,7 @@ def calculadora_basica():
     
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 6. PANTALLAS --- (Se mantienen igual)
+# --- 6. PANTALLAS ---
 def ingreso_inventario_pantalla(local_id, user_key):
     st.header("📋 Ingreso de Inventario")
     if 'carritos' not in st.session_state: st.session_state.carritos = {}
