@@ -46,27 +46,42 @@ st.markdown(f"""
         border-radius: 10px !important;
     }}
     
-    /* FORZAR TEXTO NEGRO EN BOTONES DE CALCULADORA */
-    .calc-container div.stButton > button {{
+    /* CONTENEDOR GRID CALCULADORA 4X4 */
+    .calc-grid-container {{
+        display: grid !important;
+        grid-template-columns: repeat(4, 1fr) !important;
+        gap: 8px !important;
+        width: 100% !important;
+        max-width: 320px;
+        margin: 0 auto;
+        padding: 10px;
+    }}
+
+    /* Forzar que las columnas de Streamlit no se apilen en móvil */
+    .calc-grid-container [data-testid="column"] {{
+        width: 100% !important;
+        flex: 1 1 calc(25% - 8px) !important;
+        min-width: unset !important;
+    }}
+
+    .calc-grid-container button {{
+        aspect-ratio: 1 / 1 !important;
+        height: auto !important;
+        width: 100% !important;
+        min-width: unset !important;
+        font-size: 20px !important;
+        padding: 0 !important;
         background-color: #F0F2F6 !important;
         color: #000000 !important;
         border-radius: 12px !important;
         border: 1px solid #DDE1E7 !important;
-        height: 55px !important;
-        min-width: 100% !important;
-        font-size: 20px !important;
     }}
-    .calc-container div.stButton > button p {{
-        color: #000000 !important;
-    }}
-    
+
     /* Botón Igual/Enter */
     .calc-enter div.stButton > button {{
         background-color: #1A73E8 !important;
-        border: none !important;
-    }}
-    .calc-enter div.stButton > button p {{
         color: #FFFFFF !important;
+        border: none !important;
     }}
 
     .nav-active > div > button {{ background-color: #FFFFFF !important; border: 2px solid #FFCC00 !important; }}
@@ -95,51 +110,60 @@ def obtener_stock_dict(local_id):
         return df.groupby("id_producto")["cantidad"].sum().to_dict()
     except: return {}
 
-# --- 5. COMPONENTE CALCULADORA (FIXED FOR MOBILE) ---
+# --- 5. COMPONENTE CALCULADORA (OPTIMIZADO 4X4) ---
 def calculadora_basica():
     if "calc_val" not in st.session_state: st.session_state.calc_val = ""
     
     st.markdown("### 🧮 Calculadora")
-    st.text_input("Operación:", value=st.session_state.calc_val, disabled=True, key="display_calc")
     
-    # Contenedor para forzar el grid
-    st.markdown('<div class="calc-container">', unsafe_allow_html=True)
+    # Display estilizado
+    st.markdown(f"""
+        <div style="background:#222; color:#00FF00; padding:10px; border-radius:8px; 
+        text-align:right; font-family:monospace; font-size:22px; margin-bottom:10px; border:1px solid #444">
+            {st.session_state.calc_val if st.session_state.calc_val else "0"}
+        </div>
+    """, unsafe_allow_html=True)
     
-    filas = [
-        ["7", "8", "9", "/"],
-        ["4", "5", "6", "*"],
-        ["1", "2", "3", "-"],
-        ["0", ".", "C", "+"]
+    st.markdown('<div class="calc-grid-container">', unsafe_allow_html=True)
+    
+    botones = [
+        "7", "8", "9", "/",
+        "4", "5", "6", "*",
+        "1", "2", "3", "-",
+        "0", ".", "C", "+"
     ]
     
-    for fila in filas:
-        cols = st.columns(4) # En la calculadora usamos 4 columnas fijas
-        for i, b in enumerate(fila):
-            with cols[i]:
-                if st.button(b, key=f"btn_{b}_{fila}"):
-                    if b == "C": st.session_state.calc_val = ""
-                    else: st.session_state.calc_val += b
-                    st.rerun()
+    # Grid de 4 columnas
+    cols = st.columns(4)
+    for i, b in enumerate(botones):
+        with cols[i % 4]:
+            if st.button(b, key=f"btn_c_{i}_{b}"):
+                if b == "C": st.session_state.calc_val = ""
+                else: st.session_state.calc_val += b
+                st.rerun()
+    
+    st.markdown('</div>', unsafe_allow_html=True)
     
     st.write("")
     c1, c2 = st.columns(2)
     with c1:
-        if st.button("⬅️ Borrar"):
+        if st.button("⬅️ Borrar", use_container_width=True):
             st.session_state.calc_val = st.session_state.calc_val[:-1]
             st.rerun()
     with c2:
         st.markdown('<div class="calc-enter">', unsafe_allow_html=True)
-        if st.button("LISTO (Enter)", type="primary"):
+        if st.button("LISTO (Enter)", type="primary", use_container_width=True):
             try:
-                res = float(eval(st.session_state.calc_val))
-                st.session_state.resultado_calc = res
-                st.session_state.show_calc = False
-                st.session_state.calc_val = ""
-                st.rerun()
+                if st.session_state.calc_val:
+                    # eval() es simple, pero cuidado con inputs no sanitizados en producción
+                    res = float(eval(st.session_state.calc_val))
+                    st.session_state.resultado_calc = res
+                    st.session_state.show_calc = False
+                    st.session_state.calc_val = ""
+                    st.rerun()
             except:
                 st.error("Error")
         st.markdown('</div>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
 
 # --- 6. PANTALLAS ---
 def ingreso_inventario_pantalla(local_id, user_key):
