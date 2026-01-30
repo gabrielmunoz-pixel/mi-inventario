@@ -130,28 +130,33 @@ def reportes_pantalla(local_id):
 def admin_maestro(local_id):
     st.header("⚙️ Maestro de Productos")
     
-    # --- RE-INCORPORACIÓN: CARGA MASIVA ---
     with st.expander("📤 Carga Masiva (Excel / CSV)"):
         up = st.file_uploader("Subir archivo de productos", type=["xlsx", "csv"])
         if up and st.button("Procesar Archivo"):
             try:
                 df_up = pd.read_csv(up) if up.name.endswith('.csv') else pd.read_excel(up)
-                # Mapeo de nombres de columnas del usuario a la BD
                 mapeo = {
                     "Número de artículo": "sku",
                     "Descripción del artículo": "nombre",
                     "Categoria": "categoria"
                 }
                 df_up = df_up.rename(columns=mapeo)
-                # Asegurar que existan columnas mínimas
-                if 'formato_medida' not in df_up.columns: df_up['formato_medida'] = "1 unidad"
                 
-                # Upsert a Supabase
-                supabase.table("productos_maestro").upsert(df_up.to_dict(orient='records'), on_conflict="sku").execute()
-                st.success("✅ Productos cargados/actualizados correctamente"); st.rerun()
-            except Exception as e: st.error(f"Error en carga: {e}")
+                if 'formato_medida' not in df_up.columns:
+                    df_up['formato_medida'] = "1 unidad"
+                else:
+                    df_up['formato_medida'] = df_up['formato_medida'].astype(str).apply(
+                        lambda x: f"{x} unidad" if x.isdigit() else x
+                    )
+                
+                columnas_validas = ['sku', 'nombre', 'categoria', 'formato_medida']
+                df_final = df_up[[c for c in columnas_validas if c in df_up.columns]]
+                
+                supabase.table("productos_maestro").upsert(df_final.to_dict(orient='records'), on_conflict="sku").execute()
+                st.success("✅ Carga masiva completada"); st.rerun()
+            except Exception as e: 
+                st.error(f"Error: {e}")
 
-    # --- EDICIÓN DIRECTA ---
     res = supabase.table("productos_maestro").select("*").execute().data
     if res:
         st_dict = obtener_stock_dict(local_id)
@@ -173,7 +178,7 @@ def admin_maestro(local_id):
                         "id_local": local_id, "id_producto": row['id'], 
                         "cantidad": diff, "tipo_movimiento": "AJUSTE", "ubicacion": "Corrección Maestro"
                     }).execute()
-            st.success("Actualizado"); st.rerun()
+            st.success("Cambios guardados"); st.rerun()
 
 def admin_usuarios(locales):
     st.header("👤 Usuarios")
