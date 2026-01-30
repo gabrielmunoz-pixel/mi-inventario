@@ -36,24 +36,12 @@ st.markdown(f"""
     .stApp {{ background-color: #000000; }}
     [data-testid="stSidebar"] {{ background-color: #111111; border-right: 1px solid #333; }}
     .stMarkdown p, label p, .stHeader h1, .stHeader h2, .stExpander p, .stAlert p {{ color: #FFFFFF !important; }}
-    
-    div.stButton > button {{ 
-        background-color: #FFCC00 !important; 
-        color: #000000 !important; 
-        font-weight: bold !important; 
-        border-radius: 10px !important;
-    }}
-
+    div.stButton > button {{ background-color: #FFCC00 !important; color: #000000 !important; font-weight: bold !important; border-radius: 10px !important; }}
     .nav-active > div > button {{ background-color: #FFFFFF !important; border: 2px solid #FFCC00 !important; }}
     .red-btn > div > button {{ background-color: #DD0000 !important; color: white !important; }}
     .green-btn > div > button {{ background-color: #28a745 !important; color: white !important; }}
     .user-info {{ font-family: monospace; color: #FFCC00; font-size: 12px; margin-bottom: 10px; }}
-
-    iframe {{
-        max-width: 450px !important;
-        display: block;
-        margin: 0 auto;
-    }}
+    iframe {{ max-width: 450px !important; display: block; margin: 0 auto; }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -121,17 +109,15 @@ def calculadora_basica():
         }
     </script>
     """
-    resultado = components.html(calc_html, height=520, scrolling=False)
+    # Aumentamos la altura a 550 para que no se corten los botones
+    resultado = components.html(calc_html, height=550, scrolling=False)
     
-    # CORRECCIÓN DEL ERROR: Solo procesar si hay un valor real (no None)
     if resultado is not None:
         try:
-            val = float(resultado)
-            st.session_state.resultado_calc = val
+            st.session_state.resultado_calc = float(resultado)
             st.session_state.show_calc = False
             st.rerun()
-        except:
-            pass
+        except: pass
 
 # --- 6. PANTALLAS ---
 def ingreso_inventario_pantalla(local_id, user_key):
@@ -153,8 +139,8 @@ def ingreso_inventario_pantalla(local_id, user_key):
         c1, c2, c3 = st.columns([2, 2, 0.6])
         with c1: ubi = st.selectbox("Ubicación:", ["Bodega", "Frío", "Cocina", "Producción"])
         with c2: 
-            # Se usa el valor de la sesión directamente
-            cant = st.number_input("Cantidad:", min_value=0.0, step=1.0, value=float(st.session_state.resultado_calc), key="input_cant")
+            # Cambiamos el KEY dinámicamente para forzar la inyección del dato calculado
+            cant = st.number_input("Cantidad:", min_value=0.0, step=1.0, value=float(st.session_state.resultado_calc), key=f"cant_{st.session_state.resultado_calc}")
         with c3:
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("🧮"):
@@ -203,8 +189,7 @@ def reportes_pantalla(local_id):
         query = supabase.table("movimientos_inventario").select("*, productos_maestro(sku, nombre, formato_medida)").eq("id_local", local_id).execute().data
         if not query: st.warning("No hay registros"); return
         df = pd.json_normalize(query)
-        with t1:
-            st.dataframe(df[['fecha_hora', 'productos_maestro.sku', 'productos_maestro.nombre', 'tipo_movimiento', 'cantidad']], use_container_width=True)
+        with t1: st.dataframe(df[['fecha_hora', 'productos_maestro.sku', 'productos_maestro.nombre', 'tipo_movimiento', 'cantidad']], use_container_width=True)
         with t2:
             df_s = df.groupby(['productos_maestro.sku', 'productos_maestro.nombre', 'productos_maestro.formato_medida'])['cantidad'].sum().reset_index()
             df_s['Factor'] = df_s['productos_maestro.formato_medida'].apply(extraer_valor_formato)
