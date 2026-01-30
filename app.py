@@ -36,12 +36,25 @@ st.markdown(f"""
     .stApp {{ background-color: #000000; }}
     [data-testid="stSidebar"] {{ background-color: #111111; border-right: 1px solid #333; }}
     .stMarkdown p, label p, .stHeader h1, .stHeader h2, .stExpander p, .stAlert p {{ color: #FFFFFF !important; }}
-    div.stButton > button {{ background-color: #FFCC00 !important; color: #000000 !important; font-weight: bold !important; border-radius: 10px !important; }}
+    
+    div.stButton > button {{ 
+        background-color: #FFCC00 !important; 
+        color: #000000 !important; 
+        font-weight: bold !important; 
+        border-radius: 10px !important;
+    }}
+
     .nav-active > div > button {{ background-color: #FFFFFF !important; border: 2px solid #FFCC00 !important; }}
     .red-btn > div > button {{ background-color: #DD0000 !important; color: white !important; }}
     .green-btn > div > button {{ background-color: #28a745 !important; color: white !important; }}
     .user-info {{ font-family: monospace; color: #FFCC00; font-size: 12px; margin-bottom: 10px; }}
-    iframe {{ max-width: 450px !important; display: block; margin: 0 auto; }}
+
+    iframe {{
+        max-width: 450px !important;
+        display: block;
+        margin: 0 auto;
+        border: none;
+    }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -64,32 +77,32 @@ def obtener_stock_dict(local_id):
         return df.groupby("id_producto")["cantidad"].sum().to_dict()
     except: return {}
 
-# --- 5. COMPONENTE CALCULADORA ---
+# --- 5. COMPONENTE CALCULADORA (Ajustada para escritorio) ---
 def calculadora_basica():
     calc_html = """
-    <div id="calc-container" style="background: #000; padding: 10px; border-radius: 15px; width: 100%; box-sizing: border-box; font-family: sans-serif;">
-        <div id="display" style="background: #1e1e1e; color: #00ff00; padding: 15px; text-align: right; font-size: 32px; border-radius: 10px; margin-bottom: 15px; min-height: 40px; border: 2px solid #333;">0</div>
-        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
-            <button onclick="press('7')" style="aspect-ratio: 1; background: #FFCC00; border: none; border-radius: 10px; font-size: 20px; font-weight: bold;">7</button>
-            <button onclick="press('8')" style="aspect-ratio: 1; background: #FFCC00; border: none; border-radius: 10px; font-size: 20px; font-weight: bold;">8</button>
-            <button onclick="press('9')" style="aspect-ratio: 1; background: #FFCC00; border: none; border-radius: 10px; font-size: 20px; font-weight: bold;">9</button>
-            <button onclick="press('/')" style="aspect-ratio: 1; background: #333; color: #FFCC00; border: 1px solid #FFCC00; border-radius: 10px; font-size: 20px;">/</button>
-            <button onclick="press('4')" style="aspect-ratio: 1; background: #FFCC00; border: none; border-radius: 10px; font-size: 20px; font-weight: bold;">4</button>
-            <button onclick="press('5')" style="aspect-ratio: 1; background: #FFCC00; border: none; border-radius: 10px; font-size: 20px; font-weight: bold;">5</button>
-            <button onclick="press('6')" style="aspect-ratio: 1; background: #FFCC00; border: none; border-radius: 10px; font-size: 20px; font-weight: bold;">6</button>
-            <button onclick="press('*')" style="aspect-ratio: 1; background: #333; color: #FFCC00; border: 1px solid #FFCC00; border-radius: 10px; font-size: 20px;">*</button>
-            <button onclick="press('1')" style="aspect-ratio: 1; background: #FFCC00; border: none; border-radius: 10px; font-size: 20px; font-weight: bold;">1</button>
-            <button onclick="press('2')" style="aspect-ratio: 1; background: #FFCC00; border: none; border-radius: 10px; font-size: 20px; font-weight: bold;">2</button>
-            <button onclick="press('3')" style="aspect-ratio: 1; background: #FFCC00; border: none; border-radius: 10px; font-size: 20px; font-weight: bold;">3</button>
-            <button onclick="press('-')" style="aspect-ratio: 1; background: #333; color: #FFCC00; border: 1px solid #FFCC00; border-radius: 10px; font-size: 20px;">-</button>
-            <button onclick="press('0')" style="aspect-ratio: 1; background: #FFCC00; border: none; border-radius: 10px; font-size: 20px; font-weight: bold;">0</button>
-            <button onclick="press('.')" style="aspect-ratio: 1; background: #FFCC00; border: none; border-radius: 10px; font-size: 20px; font-weight: bold;">.</button>
-            <button onclick="solve()" style="aspect-ratio: 1; background: #1A73E8; color: white; border: none; border-radius: 10px; font-size: 20px; font-weight: bold;">=</button>
-            <button onclick="press('+')" style="aspect-ratio: 1; background: #333; color: #FFCC00; border: 1px solid #FFCC00; border-radius: 10px; font-size: 20px;">+</button>
+    <div id="calc-container" style="background: #000; padding: 5px; border-radius: 10px; font-family: sans-serif;">
+        <div id="display" style="background: #1e1e1e; color: #00ff00; padding: 10px; text-align: right; font-size: 24px; border-radius: 5px; margin-bottom: 10px; min-height: 35px; border: 2px solid #333;">0</div>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px;">
+            <button onclick="press('7')" style="height: 40px; background: #FFCC00; border: none; border-radius: 5px; font-weight: bold;">7</button>
+            <button onclick="press('8')" style="height: 40px; background: #FFCC00; border: none; border-radius: 5px; font-weight: bold;">8</button>
+            <button onclick="press('9')" style="height: 40px; background: #FFCC00; border: none; border-radius: 5px; font-weight: bold;">9</button>
+            <button onclick="press('/')" style="height: 40px; background: #333; color: #FFCC00; border: 1px solid #FFCC00; border-radius: 5px;">/</button>
+            <button onclick="press('4')" style="height: 40px; background: #FFCC00; border: none; border-radius: 5px; font-weight: bold;">4</button>
+            <button onclick="press('5')" style="height: 40px; background: #FFCC00; border: none; border-radius: 5px; font-weight: bold;">5</button>
+            <button onclick="press('6')" style="height: 40px; background: #FFCC00; border: none; border-radius: 5px; font-weight: bold;">6</button>
+            <button onclick="press('*')" style="height: 40px; background: #333; color: #FFCC00; border: 1px solid #FFCC00; border-radius: 5px;">*</button>
+            <button onclick="press('1')" style="height: 40px; background: #FFCC00; border: none; border-radius: 5px; font-weight: bold;">1</button>
+            <button onclick="press('2')" style="height: 40px; background: #FFCC00; border: none; border-radius: 5px; font-weight: bold;">2</button>
+            <button onclick="press('3')" style="height: 40px; background: #FFCC00; border: none; border-radius: 5px; font-weight: bold;">3</button>
+            <button onclick="press('-')" style="height: 40px; background: #333; color: #FFCC00; border: 1px solid #FFCC00; border-radius: 5px;">-</button>
+            <button onclick="press('0')" style="height: 40px; background: #FFCC00; border: none; border-radius: 5px; font-weight: bold;">0</button>
+            <button onclick="press('.')" style="height: 40px; background: #FFCC00; border: none; border-radius: 5px; font-weight: bold;">.</button>
+            <button onclick="solve()" style="height: 40px; background: #1A73E8; color: white; border: none; border-radius: 5px; font-weight: bold;">=</button>
+            <button onclick="press('+')" style="height: 40px; background: #333; color: #FFCC00; border: 1px solid #FFCC00; border-radius: 5px;">+</button>
         </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px;">
-            <button onclick="clearCalc()" style="padding: 15px; background: #440000; color: white; border: none; border-radius: 10px; font-size: 16px;">C (Limpiar)</button>
-            <button onclick="sendResult()" style="padding: 15px; background: #1A73E8; color: white; border: none; border-radius: 10px; font-size: 16px; font-weight: bold;">LISTO</button>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+            <button onclick="clearCalc()" style="padding: 10px; background: #440000; color: white; border: none; border-radius: 5px;">Limpiar</button>
+            <button onclick="sendResult()" style="padding: 10px; background: #1A73E8; color: white; border: none; border-radius: 5px; font-weight: bold;">LISTO</button>
         </div>
     </div>
     <script>
@@ -105,19 +118,16 @@ def calculadora_basica():
             try {
                 let finalVal = eval(current);
                 window.parent.postMessage({ type: "streamlit:setComponentValue", value: finalVal }, "*");
-            } catch (e) { console.log("Error"); }
+            } catch (e) { }
         }
     </script>
     """
-    # Aumentamos la altura a 550 para que no se corten los botones
-    resultado = components.html(calc_html, height=550, scrolling=False)
+    resultado = components.html(calc_html, height=300, scrolling=False)
     
     if resultado is not None:
-        try:
-            st.session_state.resultado_calc = float(resultado)
-            st.session_state.show_calc = False
-            st.rerun()
-        except: pass
+        st.session_state.resultado_calc = float(resultado)
+        st.session_state.show_calc = False
+        st.rerun()
 
 # --- 6. PANTALLAS ---
 def ingreso_inventario_pantalla(local_id, user_key):
@@ -139,8 +149,10 @@ def ingreso_inventario_pantalla(local_id, user_key):
         c1, c2, c3 = st.columns([2, 2, 0.6])
         with c1: ubi = st.selectbox("Ubicación:", ["Bodega", "Frío", "Cocina", "Producción"])
         with c2: 
-            # Cambiamos el KEY dinámicamente para forzar la inyección del dato calculado
-            cant = st.number_input("Cantidad:", min_value=0.0, step=1.0, value=float(st.session_state.resultado_calc), key=f"cant_{st.session_state.resultado_calc}")
+            # CLAVE DEL ÉXITO: El key cambia según el valor para forzar actualización
+            cant = st.number_input("Cantidad:", min_value=0.0, step=1.0, 
+                                   value=float(st.session_state.resultado_calc), 
+                                   key=f"input_cant_{st.session_state.resultado_calc}")
         with c3:
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("🧮"):
@@ -181,7 +193,6 @@ def ingreso_inventario_pantalla(local_id, user_key):
             if st.button("🗑️ BORRAR"): st.session_state.carritos[user_key] = []; st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
 
-# --- LAS DEMÁS FUNCIONES PERMANECEN EXACTAMENTE IGUAL ---
 def reportes_pantalla(local_id):
     st.header("📊 Reportes")
     t1, t2 = st.tabs(["🕒 Historial", "📦 Stock Actual"])
@@ -189,7 +200,8 @@ def reportes_pantalla(local_id):
         query = supabase.table("movimientos_inventario").select("*, productos_maestro(sku, nombre, formato_medida)").eq("id_local", local_id).execute().data
         if not query: st.warning("No hay registros"); return
         df = pd.json_normalize(query)
-        with t1: st.dataframe(df[['fecha_hora', 'productos_maestro.sku', 'productos_maestro.nombre', 'tipo_movimiento', 'cantidad']], use_container_width=True)
+        with t1:
+            st.dataframe(df[['fecha_hora', 'productos_maestro.sku', 'productos_maestro.nombre', 'tipo_movimiento', 'cantidad']], use_container_width=True)
         with t2:
             df_s = df.groupby(['productos_maestro.sku', 'productos_maestro.nombre', 'productos_maestro.formato_medida'])['cantidad'].sum().reset_index()
             df_s['Factor'] = df_s['productos_maestro.formato_medida'].apply(extraer_valor_formato)
