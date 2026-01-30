@@ -19,22 +19,18 @@ except Exception as e:
 def sync_session():
     params = st.query_params
     if "user_data" in params and "auth_user" not in st.session_state:
-        try: 
-            st.session_state.auth_user = json.loads(params["user_data"])
-        except: 
-            pass
+        try: st.session_state.auth_user = json.loads(params["user_data"])
+        except: pass
     if "auth_user" in st.session_state:
         st.query_params["user_data"] = json.dumps(st.session_state.auth_user)
 
 def logout():
-    if "auth_user" in st.session_state: 
-        del st.session_state.auth_user
-    if "carritos" in st.session_state: 
-        st.session_state.carritos = {}
+    if "auth_user" in st.session_state: del st.session_state.auth_user
+    if "carritos" in st.session_state: st.session_state.carritos = {}
     st.query_params.clear()
     st.rerun()
 
-# 3. ESTILOS (Originales mantenidos)
+# 3. ESTILOS
 st.markdown("""
     <style>
     .stApp { background-color: #000000; }
@@ -68,7 +64,7 @@ def obtener_stock_dict(local_id):
         return df.groupby("id_producto")["cantidad"].sum().to_dict()
     except: return {}
 
-# 5. COMPONENTE CALCULADORA (El original con fix de comunicación)
+# 5. COMPONENTE CALCULADORA
 def calculadora_basica():
     calc_html = """
     <div id="calc-container" style="background: #000; padding: 10px; border-radius: 15px; font-family: sans-serif;">
@@ -104,19 +100,15 @@ def calculadora_basica():
         function solve() { try { current = eval(current).toString(); display.innerText = current; } catch(e) { display.innerText="Error"; current=""; } }
         function sendResult() {
             let val = eval(current);
-            if(!isNaN(val)) { 
-                window.parent.postMessage({type: "streamlit:setComponentValue", value: parseFloat(val)}, "*"); 
-            }
+            if(!isNaN(val)) { window.parent.postMessage({type: "streamlit:setComponentValue", value: val}, "*"); }
         }
     </script>
     """
     return components.html(calc_html, height=400)
 
-# 6. PANTALLA INGRESO (Restaurada a visual original)
+# 6. PANTALLA INGRESO
 def ingreso_inventario_pantalla(local_id, user_key):
     st.header("📋 Ingreso de Inventario")
-    
-    # Mantenemos tus inicializaciones originales
     if 'carritos' not in st.session_state: st.session_state.carritos = {}
     if user_key not in st.session_state.carritos: st.session_state.carritos[user_key] = []
     if 'show_calc' not in st.session_state: st.session_state.show_calc = False
@@ -125,28 +117,15 @@ def ingreso_inventario_pantalla(local_id, user_key):
     res = supabase.table("productos_maestro").select("*").execute().data
     if not res: return
     prod_map = {f"{p['nombre']} | {p['formato_medida']}": p for p in res}
-    
     sel = st.selectbox("Selecciona producto:", [""] + sorted(list(prod_map.keys())))
     
     if sel:
         p = prod_map[sel]
         c1, c2, c3 = st.columns([2, 2, 0.6])
-        with c1: 
-            ubi = st.selectbox("Ubicación:", ["Bodega", "Frío", "Cocina", "Producción"])
-        
+        with c1: ubi = st.selectbox("Ubicación:", ["Bodega", "Frío", "Cocina", "Producción"])
         with c2:
             placeholder = st.empty()
-            # FIX: El number_input DEBE tener una key que dependa del valor para forzar el refresco visual
-            # pero el valor real se toma de session_state.resultado_calc
-            cant = placeholder.number_input(
-                "Cantidad:", 
-                min_value=0.0, 
-                value=float(st.session_state.resultado_calc), 
-                key=f"input_manual_{st.session_state.resultado_calc}"
-            )
-            # Actualizamos el estado si el usuario escribe manualmente
-            st.session_state.resultado_calc = cant
-
+            cant = placeholder.number_input("Cantidad:", min_value=0.0, value=float(st.session_state.resultado_calc), key=f"c_{st.session_state.resultado_calc}")
         with c3:
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("🧮"): 
@@ -155,27 +134,15 @@ def ingreso_inventario_pantalla(local_id, user_key):
 
         if st.session_state.show_calc:
             with st.expander("Calculadora", expanded=True):
-                # Capturamos el retorno del iframe
                 calc_val = calculadora_basica()
-                
-                # Si calc_val no es None, significa que se presionó "LISTO"
                 if calc_val is not None:
-                    # Si el componente devuelve un diccionario, extraemos 'value', sino el valor directo
-                    nuevo_valor = calc_val if not isinstance(calc_val, dict) else calc_val.get('value', 0)
-                    st.session_state.resultado_calc = float(nuevo_valor)
+                    st.session_state.resultado_calc = float(calc_val)
                     st.session_state.show_calc = False
                     st.rerun()
 
         if st.button("Añadir a la lista"):
-            st.session_state.carritos[user_key].append({
-                "id_producto": p['id'], 
-                "Producto": p['nombre'], 
-                "Ubicación": ubi, 
-                "Cantidad": float(st.session_state.resultado_calc), 
-                "Formato": p['formato_medida'], 
-                "Factor": extraer_valor_formato(p['formato_medida'])
-            })
-            st.session_state.resultado_calc = 0.0 # Reset
+            st.session_state.carritos[user_key].append({"id_producto": p['id'], "Producto": p['nombre'], "Ubicación": ubi, "Cantidad": float(cant), "Formato": p['formato_medida'], "Factor": extraer_valor_formato(p['formato_medida'])})
+            st.session_state.resultado_calc = 0.0
             st.rerun()
 
     if st.session_state.carritos[user_key]:
@@ -183,17 +150,11 @@ def ingreso_inventario_pantalla(local_id, user_key):
         ed = st.data_editor(df_c, column_config={"id_producto": None, "Factor": None}, use_container_width=True)
         if st.button("🚀 FINALIZAR"):
             for r in ed.to_dict(orient='records'):
-                supabase.table("movimientos_inventario").insert({
-                    "id_local": local_id, 
-                    "id_producto": r['id_producto'], 
-                    "cantidad": r['Cantidad']*r['Factor'], 
-                    "tipo_movimiento": "AJUSTE", 
-                    "ubicacion": r['Ubicación']
-                }).execute()
+                supabase.table("movimientos_inventario").insert({"id_local": local_id, "id_producto": r['id_producto'], "cantidad": r['Cantidad']*r['Factor'], "tipo_movimiento": "AJUSTE", "ubicacion": r['Ubicación']}).execute()
             st.session_state.carritos[user_key] = []
             st.rerun()
 
-# --- (Resto de pantallas: Reportes, Maestro, Usuarios se mantienen igual al original) ---
+# 7. REPORTES
 def reportes_pantalla(local_id):
     st.header("📊 Reportes")
     query = supabase.table("movimientos_inventario").select("fecha_hora, tipo_movimiento, cantidad, ubicacion, productos_maestro(sku, nombre, formato_medida)").eq("id_local", local_id).execute().data
@@ -201,6 +162,7 @@ def reportes_pantalla(local_id):
         df = pd.json_normalize(query)
         st.dataframe(df, use_container_width=True)
 
+# 8. MAESTRO
 def admin_maestro(local_id):
     st.header("⚙️ Maestro")
     res = supabase.table("productos_maestro").select("*").execute().data
@@ -208,10 +170,12 @@ def admin_maestro(local_id):
         df = pd.DataFrame(res)
         st.data_editor(df, use_container_width=True)
 
+# 9. USUARIOS
 def admin_usuarios(locales_map):
     st.header("👤 Usuarios")
     st.info("Gestión de usuarios activa.")
 
+# 10. MAIN
 def main():
     sync_session()
     if 'auth_user' not in st.session_state:
@@ -225,29 +189,19 @@ def main():
         return
 
     user = st.session_state.auth_user
+    locales = get_locales_map()
     if 'opt' not in st.session_state: st.session_state.opt = "📋 Ingreso"
     
     st.sidebar.title("Menú")
-    # Si tenías un logo aquí, pégalo de nuevo: st.sidebar.image("logo.png")
-    if st.sidebar.button("📋 Ingreso"): 
-        st.session_state.opt = "📋 Ingreso"
-        st.rerun()
-    if st.sidebar.button("📊 Reportes"): 
-        st.session_state.opt = "📊 Reportes"
-        st.rerun()
+    if st.sidebar.button("📋 Ingreso"): st.session_state.opt = "📋 Ingreso"; st.rerun()
+    if st.sidebar.button("📊 Reportes"): st.session_state.opt = "📊 Reportes"; st.rerun()
     if user['role'] == "Admin":
-        if st.sidebar.button("⚙️ Maestro"): 
-            st.session_state.opt = "⚙️ Maestro"
-            st.rerun()
-    if st.sidebar.button("🚪 Salir"): 
-        logout()
+        if st.sidebar.button("⚙️ Maestro"): st.session_state.opt = "⚙️ Maestro"; st.rerun()
+    if st.sidebar.button("🚪 Salir"): logout()
 
-    if st.session_state.opt == "📋 Ingreso": 
-        ingreso_inventario_pantalla(user['local'], user['user'])
-    elif st.session_state.opt == "📊 Reportes": 
-        reportes_pantalla(user['local'])
-    elif st.session_state.opt == "⚙️ Maestro": 
-        admin_maestro(user['local'])
+    if st.session_state.opt == "📋 Ingreso": ingreso_inventario_pantalla(user['local'], user['user'])
+    elif st.session_state.opt == "📊 Reportes": reportes_pantalla(user['local'])
+    elif st.session_state.opt == "⚙️ Maestro": admin_maestro(user['local'])
 
 if __name__ == "__main__":
     main()
