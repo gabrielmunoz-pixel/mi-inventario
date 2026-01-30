@@ -46,19 +46,26 @@ st.markdown(f"""
         border-radius: 10px !important;
     }}
     
-    /* Estilo específico Calculadora (Redondeados, fondo claro, texto negro) */
-    .calc-box div.stButton > button {{
+    /* FORZAR TEXTO NEGRO EN BOTONES DE CALCULADORA */
+    .calc-container div.stButton > button {{
         background-color: #F0F2F6 !important;
         color: #000000 !important;
-        border-radius: 50px !important;
+        border-radius: 12px !important;
         border: 1px solid #DDE1E7 !important;
-        min-width: 10px !important;
-        height: 50px !important;
+        height: 55px !important;
+        min-width: 100% !important;
+        font-size: 20px !important;
+    }}
+    .calc-container div.stButton > button p {{
+        color: #000000 !important;
     }}
     
-    /* Botón Enter/Igual de la calculadora */
+    /* Botón Igual/Enter */
     .calc-enter div.stButton > button {{
         background-color: #1A73E8 !important;
+        border: none !important;
+    }}
+    .calc-enter div.stButton > button p {{
         color: #FFFFFF !important;
     }}
 
@@ -66,7 +73,6 @@ st.markdown(f"""
     .red-btn > div > button {{ background-color: #DD0000 !important; color: white !important; }}
     .green-btn > div > button {{ background-color: #28a745 !important; color: white !important; }}
     .user-info {{ font-family: monospace; color: #FFCC00; font-size: 12px; margin-bottom: 10px; }}
-    [data-testid="stDataFrame"] *, [data-testid="stTable"] * {{ color: inherit !important; }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -89,14 +95,16 @@ def obtener_stock_dict(local_id):
         return df.groupby("id_producto")["cantidad"].sum().to_dict()
     except: return {}
 
-# --- 5. COMPONENTE CALCULADORA ---
+# --- 5. COMPONENTE CALCULADORA (FIXED FOR MOBILE) ---
 def calculadora_basica():
     if "calc_val" not in st.session_state: st.session_state.calc_val = ""
     
     st.markdown("### 🧮 Calculadora")
     st.text_input("Operación:", value=st.session_state.calc_val, disabled=True, key="display_calc")
     
-    # Matriz de botones basada en la foto cargada
+    # Contenedor para forzar el grid
+    st.markdown('<div class="calc-container">', unsafe_allow_html=True)
+    
     filas = [
         ["7", "8", "9", "/"],
         ["4", "5", "6", "*"],
@@ -105,15 +113,13 @@ def calculadora_basica():
     ]
     
     for fila in filas:
-        cols = st.columns(4)
+        cols = st.columns(4) # En la calculadora usamos 4 columnas fijas
         for i, b in enumerate(fila):
             with cols[i]:
-                st.markdown('<div class="calc-box">', unsafe_allow_html=True)
                 if st.button(b, key=f"btn_{b}_{fila}"):
                     if b == "C": st.session_state.calc_val = ""
                     else: st.session_state.calc_val += b
                     st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
     
     st.write("")
     c1, c2 = st.columns(2)
@@ -133,6 +139,7 @@ def calculadora_basica():
             except:
                 st.error("Error")
         st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # --- 6. PANTALLAS ---
 def ingreso_inventario_pantalla(local_id, user_key):
@@ -151,14 +158,13 @@ def ingreso_inventario_pantalla(local_id, user_key):
     
     if sel:
         p = prod_map[sel]
-        c1, c2, c3 = st.columns([2, 2, 0.5])
+        c1, c2, c3 = st.columns([2, 2, 0.6])
         with c1: ubi = st.selectbox("Ubicación:", ["Bodega", "Frío", "Cocina", "Producción"])
         with c2: 
             cant = st.number_input("Cantidad:", min_value=0.0, step=1.0, value=st.session_state.resultado_calc)
         with c3:
-            st.write("") 
-            st.write("") 
-            if st.button("🧮"):
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("🧮", help="Abrir calculadora"):
                 st.session_state.show_calc = not st.session_state.show_calc
                 st.rerun()
 
@@ -264,15 +270,6 @@ def admin_usuarios(locales):
                 rol = "Admin" if st.session_state.u_act == "admin" else "Staff"
                 supabase.table("usuarios_sistema").upsert({"nombre_apellido": n, "id_local": l_id, "usuario": u, "clave": p, "rol": rol}, on_conflict="usuario").execute()
                 st.session_state.u_act = None; st.rerun()
-    elif st.session_state.u_act == "edit":
-        res = supabase.table("usuarios_sistema").select("*").execute().data
-        if res:
-            u_sel = st.selectbox("User", [x['usuario'] for x in res])
-            curr = next(x for x in res if x['usuario'] == u_sel)
-            with st.form("E"):
-                en = st.text_input("Nombre", value=curr['nombre_apellido']); ep = st.text_input("Clave", value=curr['clave'])
-                if st.form_submit_button("Update"):
-                    supabase.table("usuarios_sistema").update({"nombre_apellido": en, "clave": ep}).eq("usuario", u_sel).execute(); st.rerun()
 
 # --- 7. MAIN ---
 def main():
