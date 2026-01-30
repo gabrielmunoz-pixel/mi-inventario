@@ -6,7 +6,7 @@ from datetime import datetime
 from supabase import create_client, Client
 import streamlit.components.v1 as components
 
-# --- 1. CONEXIÓN (Mantenido igual) ---
+# --- 1. CONEXIÓN ---
 try:
     URL = st.secrets["SUPABASE_URL"]
     KEY = st.secrets["SUPABASE_KEY"]
@@ -15,7 +15,7 @@ except:
     st.error("Error de conexión con Supabase.")
     st.stop()
 
-# --- 2. GESTIÓN DE SESIÓN (Mantenido igual) ---
+# --- 2. GESTIÓN DE SESIÓN ---
 def sync_session():
     params = st.query_params
     if "user_data" in params and "auth_user" not in st.session_state:
@@ -30,7 +30,7 @@ def logout():
     st.query_params.clear()
     st.rerun()
 
-# --- 3. DISEÑO VISUAL (Mantenido igual) ---
+# --- 3. DISEÑO VISUAL ---
 st.markdown(f"""
     <style>
     .stApp {{ background-color: #000000; }}
@@ -57,7 +57,7 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 4. FUNCIONES LÓGICAS (Mantenido igual) ---
+# --- 4. FUNCIONES LÓGICAS ---
 def get_locales_map():
     try:
         res = supabase.table("locales").select("id, nombre").execute().data
@@ -76,88 +76,64 @@ def obtener_stock_dict(local_id):
         return df.groupby("id_producto")["cantidad"].sum().to_dict()
     except: return {}
 
-# --- 5. COMPONENTE CALCULADORA (MODIFICADO) ---
+# --- 5. COMPONENTE CALCULADORA ---
 def calculadora_basica():
     calc_html = """
     <div id="calc-container" style="background: #000; padding: 10px; border-radius: 15px; width: 100%; box-sizing: border-box; font-family: sans-serif;">
         <div id="display" style="background: #1e1e1e; color: #00ff00; padding: 15px; text-align: right; font-size: 32px; border-radius: 10px; margin-bottom: 15px; min-height: 40px; border: 2px solid #333;">0</div>
-        
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
             <button onclick="press('7')" style="aspect-ratio: 1; background: #FFCC00; border: none; border-radius: 10px; font-size: 20px; font-weight: bold;">7</button>
             <button onclick="press('8')" style="aspect-ratio: 1; background: #FFCC00; border: none; border-radius: 10px; font-size: 20px; font-weight: bold;">8</button>
             <button onclick="press('9')" style="aspect-ratio: 1; background: #FFCC00; border: none; border-radius: 10px; font-size: 20px; font-weight: bold;">9</button>
             <button onclick="press('/')" style="aspect-ratio: 1; background: #333; color: #FFCC00; border: 1px solid #FFCC00; border-radius: 10px; font-size: 20px;">/</button>
-            
             <button onclick="press('4')" style="aspect-ratio: 1; background: #FFCC00; border: none; border-radius: 10px; font-size: 20px; font-weight: bold;">4</button>
             <button onclick="press('5')" style="aspect-ratio: 1; background: #FFCC00; border: none; border-radius: 10px; font-size: 20px; font-weight: bold;">5</button>
             <button onclick="press('6')" style="aspect-ratio: 1; background: #FFCC00; border: none; border-radius: 10px; font-size: 20px; font-weight: bold;">6</button>
             <button onclick="press('*')" style="aspect-ratio: 1; background: #333; color: #FFCC00; border: 1px solid #FFCC00; border-radius: 10px; font-size: 20px;">*</button>
-            
             <button onclick="press('1')" style="aspect-ratio: 1; background: #FFCC00; border: none; border-radius: 10px; font-size: 20px; font-weight: bold;">1</button>
             <button onclick="press('2')" style="aspect-ratio: 1; background: #FFCC00; border: none; border-radius: 10px; font-size: 20px; font-weight: bold;">2</button>
             <button onclick="press('3')" style="aspect-ratio: 1; background: #FFCC00; border: none; border-radius: 10px; font-size: 20px; font-weight: bold;">3</button>
             <button onclick="press('-')" style="aspect-ratio: 1; background: #333; color: #FFCC00; border: 1px solid #FFCC00; border-radius: 10px; font-size: 20px;">-</button>
-            
             <button onclick="press('0')" style="aspect-ratio: 1; background: #FFCC00; border: none; border-radius: 10px; font-size: 20px; font-weight: bold;">0</button>
             <button onclick="press('.')" style="aspect-ratio: 1; background: #FFCC00; border: none; border-radius: 10px; font-size: 20px; font-weight: bold;">.</button>
             <button onclick="solve()" style="aspect-ratio: 1; background: #1A73E8; color: white; border: none; border-radius: 10px; font-size: 20px; font-weight: bold;">=</button>
             <button onclick="press('+')" style="aspect-ratio: 1; background: #333; color: #FFCC00; border: 1px solid #FFCC00; border-radius: 10px; font-size: 20px;">+</button>
         </div>
-
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px;">
             <button onclick="clearCalc()" style="padding: 15px; background: #440000; color: white; border: none; border-radius: 10px; font-size: 16px;">C (Limpiar)</button>
             <button onclick="sendResult()" style="padding: 15px; background: #1A73E8; color: white; border: none; border-radius: 10px; font-size: 16px; font-weight: bold;">LISTO</button>
         </div>
     </div>
-
     <script>
         let current = "";
         const display = document.getElementById('display');
-
-        function press(val) {
-            current += val;
-            display.innerText = current;
-        }
-
-        function clearCalc() {
-            current = "";
-            display.innerText = "0";
-        }
-
+        function press(val) { current += val; display.innerText = current; }
+        function clearCalc() { current = ""; display.innerText = "0"; }
         function solve() {
-            try {
-                if(current === "") return;
-                current = eval(current).toString();
-                display.innerText = current;
-            } catch (e) {
-                display.innerText = "Error";
-                current = "";
-            }
+            try { if(current === "") return; current = eval(current).toString(); display.innerText = current; }
+            catch (e) { display.innerText = "Error"; current = ""; }
         }
-
         function sendResult() {
             try {
-                // Forzar el cálculo antes de enviar por si no apretaron "="
                 let finalVal = eval(current);
-                window.parent.postMessage({
-                    type: "streamlit:setComponentValue",
-                    value: finalVal
-                }, "*");
-            } catch (e) {
-                console.log("Error al enviar");
-            }
+                window.parent.postMessage({ type: "streamlit:setComponentValue", value: finalVal }, "*");
+            } catch (e) { console.log("Error"); }
         }
     </script>
     """
-    
     resultado = components.html(calc_html, height=520, scrolling=False)
     
+    # CORRECCIÓN DEL ERROR: Solo procesar si hay un valor real (no None)
     if resultado is not None:
-        st.session_state.resultado_calc = float(resultado)
-        st.session_state.show_calc = False
-        st.rerun()
+        try:
+            val = float(resultado)
+            st.session_state.resultado_calc = val
+            st.session_state.show_calc = False
+            st.rerun()
+        except:
+            pass
 
-# --- 6. PANTALLAS (MODIFICADO SOLO INGRESO) ---
+# --- 6. PANTALLAS ---
 def ingreso_inventario_pantalla(local_id, user_key):
     st.header("📋 Ingreso de Inventario")
     if 'carritos' not in st.session_state: st.session_state.carritos = {}
@@ -177,8 +153,8 @@ def ingreso_inventario_pantalla(local_id, user_key):
         c1, c2, c3 = st.columns([2, 2, 0.6])
         with c1: ubi = st.selectbox("Ubicación:", ["Bodega", "Frío", "Cocina", "Producción"])
         with c2: 
-            # Captura el valor que viene de la calculadora
-            cant = st.number_input("Cantidad:", min_value=0.0, step=1.0, value=float(st.session_state.resultado_calc))
+            # Se usa el valor de la sesión directamente
+            cant = st.number_input("Cantidad:", min_value=0.0, step=1.0, value=float(st.session_state.resultado_calc), key="input_cant")
         with c3:
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("🧮"):
@@ -196,7 +172,7 @@ def ingreso_inventario_pantalla(local_id, user_key):
                 "Factor": extraer_valor_formato(p['formato_medida'])
             })
             st.toast(f"✅ Añadido: {p['nombre']}")
-            st.session_state.resultado_calc = 0.0 # Resetear valor para el próximo producto
+            st.session_state.resultado_calc = 0.0
             st.rerun()
 
     if st.session_state.carritos[user_key]:
@@ -219,7 +195,7 @@ def ingreso_inventario_pantalla(local_id, user_key):
             if st.button("🗑️ BORRAR"): st.session_state.carritos[user_key] = []; st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
 
-# --- RESTO DEL CÓDIGO (Reportes, Admin, Main) MANTENIDO IGUAL ---
+# --- LAS DEMÁS FUNCIONES PERMANECEN EXACTAMENTE IGUAL ---
 def reportes_pantalla(local_id):
     st.header("📊 Reportes")
     t1, t2 = st.tabs(["🕒 Historial", "📦 Stock Actual"])
@@ -251,7 +227,6 @@ def admin_maestro(local_id):
                 supabase.table("productos_maestro").upsert(df_final.to_dict(orient='records'), on_conflict="sku").execute()
                 st.success("✅ Éxito"); st.rerun()
             except Exception as e: st.error(f"Error: {e}")
-
     res = supabase.table("productos_maestro").select("*").execute().data
     if res:
         st_dict = obtener_stock_dict(local_id)
@@ -273,7 +248,6 @@ def admin_usuarios(locales):
         if st.button("Staff"): st.session_state.u_act = "staff"
     with c3: 
         if st.button("Editar"): st.session_state.u_act = "edit"
-    
     if st.session_state.u_act in ["admin", "staff"]:
         with st.form("U"):
             n = st.text_input("Nombre"); u = st.text_input("User"); p = st.text_input("Pass")
@@ -301,16 +275,13 @@ def main():
                         st.session_state.auth_user = {"user": u, "role": res[0]['rol'], "local": res[0]['id_local']}; st.rerun()
                     else: st.error("Fallo")
         return
-
     user = st.session_state.auth_user
     ld = get_locales_map(); li = {v: k for k, v in ld.items()}
     if 'opt' not in st.session_state: st.session_state.opt = "📋 Ingreso"
-    
     st.sidebar.image("Logo AE.jpg", use_container_width=True)
     if user['role'] == "Admin":
         idx = list(ld.keys()).index(li.get(user['local'], list(ld.keys())[0]))
         user['local'] = ld[st.sidebar.selectbox("Sede:", list(ld.keys()), index=idx)]
-    
     st.sidebar.markdown(f'<div class="user-info">Sede: {li.get(user["local"], "N/A")}</div>', unsafe_allow_html=True)
     opts = ["📋 Ingreso", "📊 Reportes", "👤 Usuarios", "⚙️ Maestro"] if user['role'] == "Admin" else ["📋 Ingreso", "📊 Reportes"]
     for o in opts:
@@ -319,7 +290,6 @@ def main():
         if st.sidebar.button(o): st.session_state.opt = o; st.rerun()
         st.sidebar.markdown('</div>', unsafe_allow_html=True)
     if st.sidebar.button("Salir"): logout()
-    
     if st.session_state.opt == "📋 Ingreso": ingreso_inventario_pantalla(user['local'], user['user'])
     elif st.session_state.opt == "📊 Reportes": reportes_pantalla(user['local'])
     elif st.session_state.opt == "👤 Usuarios": admin_usuarios(ld)
