@@ -181,13 +181,16 @@ def ingreso_inventario_pantalla(local_id, user_key):
         if st.session_state.show_calc:
             with st.expander("Calculadora", expanded=True):
                 calc_val = calculadora_basica()
-                if calc_val is not None:
-                    # Al recibir el valor, actualizamos la sesión y cerramos calc
-                    st.session_state.resultado_calc = float(calc_val)
-                    st.session_state.show_calc = False
-                    # El rerun forzará que el placeholder_cant se limpie y se redibuje con el nuevo valor
-                    st.rerun()
-
+                
+                # --- ESTA ES LA LÍNEA QUE EVITA EL TYPEERROR ---
+                if calc_val is not None and str(calc_val).strip() != "":
+                    try:
+                        st.session_state.resultado_calc = float(calc_val)
+                        st.session_state.show_calc = False
+                        st.rerun() 
+                    except (TypeError, ValueError):
+                        pass
+                        
         if st.button("Añadir a la lista"):
             st.session_state.carritos[user_key].append({
                 "id_producto": p['id'],
@@ -366,3 +369,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
