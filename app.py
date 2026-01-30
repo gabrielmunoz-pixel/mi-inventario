@@ -14,69 +14,56 @@ except:
     st.error("Error de conexión con Supabase.")
     st.stop()
 
-# --- 2. GESTIÓN DE SESIÓN PERSISTENTE Y LOGOUT ---
+# --- 2. GESTIÓN DE SESIÓN ---
 def sync_session():
     params = st.query_params
     if "user_data" in params and "auth_user" not in st.session_state:
-        try:
-            st.session_state.auth_user = json.loads(params["user_data"])
-        except:
-            pass
+        try: st.session_state.auth_user = json.loads(params["user_data"])
+        except: pass
     if "auth_user" in st.session_state:
         st.query_params["user_data"] = json.dumps(st.session_state.auth_user)
 
 def logout():
-    if "auth_user" in st.session_state:
-        del st.session_state.auth_user
-    if "carritos" in st.session_state:
-        st.session_state.carritos = {}
+    if "auth_user" in st.session_state: del st.session_state.auth_user
+    if "carritos" in st.session_state: st.session_state.carritos = {}
     st.query_params.clear()
     st.rerun()
 
-# --- 3. DISEÑO VISUAL (OPTIMIZADO PARA MÓVIL Y MAESTRO) ---
+# --- 3. DISEÑO VISUAL (REPARADO Y SIMPLIFICADO) ---
 st.markdown(f"""
     <style>
     .stApp {{ background-color: #000000; }}
     [data-testid="stSidebar"] {{ background-color: #111111; border-right: 1px solid #333; }}
 
-    /* TEXTOS GENERALES EN BLANCO */
-    div[data-testid="stWidgetLabel"] p, label, .stMarkdown p, .stHeader h1, .stHeader h2, .stExpander p {{ 
+    /* Textos principales en blanco para legibilidad en móvil */
+    .stMarkdown p, label p, .stHeader h1, .stHeader h2, .stExpander p, .stAlert p {{ 
         color: #FFFFFF !important; 
-        -webkit-text-fill-color: #FFFFFF !important;
     }}
     
-    .stAlert p, .stWarning p {{ color: #FFFFFF !important; }}
-
-    /* INPUTS (FONDO BLANCO, TEXTO NEGRO) */
+    /* Inputs de texto: Fondo blanco para que resalten */
     .stTextInput>div>div>input {{ 
         background-color: #FFFFFF !important; 
         color: #000000 !important;
-        -webkit-text-fill-color: #000000 !important;
     }}
 
-    /* FIX MAESTRO: Selectores y menús de tabla con texto negro */
-    div[data-baseweb="select"] > div, div[role="listbox"], div[data-testid="stDataFrame"] * {{ 
-        background-color: #FFFFFF !important; 
-        color: #000000 !important; 
-    }}
-    li[role="option"], div[role="option"], div[data-baseweb="popover"] * {{ 
-        color: #000000 !important; 
-    }}
-
-    /* BOTONES ALEMAN EXPERTO */
+    /* Botones Amarillos Aleman Experto */
     div.stButton > button {{
         background-color: #FFCC00 !important;
         color: #000000 !important;
         font-weight: bold !important;
-        min-width: 170.86px !important;
+        min-width: 170px !important;
     }}
-    div.stButton > button p {{ color: #000000 !important; }}
     
     .nav-active > div > button {{ background-color: #FFFFFF !important; border: 2px solid #FFCC00 !important; }}
     .red-btn > div > button {{ background-color: #DD0000 !important; color: white !important; }}
     .green-btn > div > button {{ background-color: #28a745 !important; color: white !important; }}
     
-    .user-info {{ font-family: monospace; color: #FFCC00; font-size: 12px; }}
+    .user-info {{ font-family: monospace; color: #FFCC00; font-size: 12px; margin-bottom: 10px; }}
+
+    /* NO FORZAR COLORES EN TABLAS: Esto evita el cuadro blanco sin texto */
+    [data-testid="stDataFrame"] *, [data-testid="stTable"] * {{ 
+        color: inherit !important; 
+    }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -93,17 +80,15 @@ def extraer_valor_formato(formato_str):
 
 # --- 5. PANTALLAS ---
 def ingreso_inventario_pantalla(local_id, user_key):
-    st.header("📋 Ingreso de Inventario Mensual")
+    st.header("📋 Ingreso de Inventario")
     if 'carritos' not in st.session_state: st.session_state.carritos = {}
     if user_key not in st.session_state.carritos: st.session_state.carritos[user_key] = []
     
-    try:
-        res = supabase.table("productos_maestro").select("*").execute().data
-    except: return
-
+    res = supabase.table("productos_maestro").select("*").execute().data
     if not res: return
     prod_map = {f"{p['nombre']} | {p['formato_medida']}": p for p in res}
-    busqueda = st.text_input("🔍 Buscar producto:", placeholder="Escribe el nombre...")
+    
+    busqueda = st.text_input("🔍 Buscar producto:")
     opciones = [o for o in prod_map.keys() if busqueda.lower() in o.lower()]
     sel = st.selectbox("Selecciona producto:", [""] + opciones)
     
@@ -111,103 +96,97 @@ def ingreso_inventario_pantalla(local_id, user_key):
         p = prod_map[sel]
         c1, c2 = st.columns(2)
         with c1: ubi = st.selectbox("Ubicación:", ["Bodega", "Frío", "Cocina", "Producción"])
-        with c2: cant = st.number_input(f"Cantidad:", min_value=0.0, step=1.0)
-        if st.button("Añadir"):
+        with c2: cant = st.number_input("Cantidad:", min_value=0.0, step=1.0)
+        if st.button("Añadir al carrito"):
             st.session_state.carritos[user_key].append({
                 "id_producto": p['id'], "Producto": p['nombre'], "Ubicación": ubi, 
                 "Cantidad": float(cant), "Formato": p['formato_medida'], 
                 "Factor": extraer_valor_formato(p['formato_medida'])
             })
-            st.toast(f"✅ Añadido: {p['nombre']}")
+            st.toast("✅ Añadido")
 
     if st.session_state.carritos[user_key]:
         df = pd.DataFrame(st.session_state.carritos[user_key])
-        ed = st.data_editor(df, column_config={"id_producto": None, "Factor": None, "Producto": st.column_config.TextColumn(disabled=True)}, use_container_width=True)
+        ed = st.data_editor(df, column_config={"id_producto": None, "Factor": None}, use_container_width=True)
         col_c, col_a = st.columns(2)
         with col_c:
             st.markdown('<div class="green-btn">', unsafe_allow_html=True)
-            if st.button("Finalizar"):
-                try:
-                    for r in ed.to_dict(orient='records'):
-                        supabase.table("movimientos_inventario").insert({
-                            "id_local": local_id, "id_producto": r['id_producto'], 
-                            "cantidad": r['Cantidad']*r['Factor'], "tipo_movimiento": "AJUSTE", 
-                            "ubicacion": r['Ubicación']
-                        }).execute()
-                    st.success("✅ Guardado correctamente")
-                    st.session_state.carritos[user_key] = []; st.rerun()
-                except Exception as e: st.error(f"Error: {e}")
+            if st.button("🚀 FINALIZAR"):
+                for r in ed.to_dict(orient='records'):
+                    supabase.table("movimientos_inventario").insert({
+                        "id_local": local_id, "id_producto": r['id_producto'], 
+                        "cantidad": r['Cantidad']*r['Factor'], "tipo_movimiento": "AJUSTE", 
+                        "ubicacion": r['Ubicación']
+                    }).execute()
+                st.success("Guardado"); st.session_state.carritos[user_key] = []; st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
         with col_a:
             st.markdown('<div class="red-btn">', unsafe_allow_html=True)
-            if st.button("Borrar"): st.session_state.carritos[user_key] = []; st.rerun()
+            if st.button("🗑️ BORRAR"): st.session_state.carritos[user_key] = []; st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
 
 def reportes_pantalla(local_id):
-    st.header("📊 Reportes de Inventario")
-    t1, t2 = st.tabs(["🕒 Historial", "📦 Stock Local"])
+    st.header("📊 Reportes")
+    t1, t2 = st.tabs(["🕒 Historial", "📦 Stock Actual"])
     try:
         query = supabase.table("movimientos_inventario").select("*, productos_maestro(nombre, formato_medida)").eq("id_local", local_id).execute().data
-        if not query:
-            st.warning("Sin datos."); return
+        if not query: st.warning("No hay registros"); return
         df = pd.json_normalize(query)
         with t1:
             st.dataframe(df[['fecha_hora', 'productos_maestro.nombre', 'tipo_movimiento', 'cantidad', 'ubicacion']], use_container_width=True)
         with t2:
             df_s = df.groupby(['productos_maestro.nombre', 'productos_maestro.formato_medida'])['cantidad'].sum().reset_index()
             df_s['Factor'] = df_s['productos_maestro.formato_medida'].apply(extraer_valor_formato)
-            df_s['Stock Actual'] = (df_s['cantidad'] / df_s['Factor']).round(2)
-            st.dataframe(df_s[['productos_maestro.nombre', 'productos_maestro.formato_medida', 'Stock Actual']], use_container_width=True)
-    except Exception as e: st.error(f"Error: {e}")
+            df_s['Stock'] = (df_s['cantidad'] / df_s['Factor']).round(2)
+            st.dataframe(df_s[['productos_maestro.nombre', 'Stock']], use_container_width=True)
+    except Exception as e: st.error(str(e))
 
 def admin_maestro():
     st.header("⚙️ Maestro de Productos")
-    with st.expander("📤 Carga Masiva"):
-        up = st.file_uploader("Subir Excel/CSV", type=["xlsx", "csv"])
+    with st.expander("📤 Carga Masiva (Excel / CSV)"):
+        up = st.file_uploader("Subir", type=["xlsx", "csv"])
         if up and st.button("Procesar"):
-            try:
-                df_up = pd.read_csv(up) if up.name.endswith('.csv') else pd.read_excel(up)
-                supabase.table("productos_maestro").upsert(df_up.to_dict(orient='records')).execute()
-                st.success("Carga exitosa"); st.rerun()
-            except Exception as e: st.error(f"Error: {e}")
+            df_up = pd.read_csv(up) if up.name.endswith('.csv') else pd.read_excel(up)
+            supabase.table("productos_maestro").upsert(df_up.to_dict(orient='records')).execute()
+            st.success("Carga OK"); st.rerun()
     res = supabase.table("productos_maestro").select("*").execute().data
     if res:
         ed = st.data_editor(pd.DataFrame(res), num_rows="dynamic", use_container_width=True)
-        if st.button("Guardar Cambios"):
-            supabase.table("productos_maestro").upsert(ed.to_dict(orient='records')).execute()
-            st.rerun()
+        if st.button("💾 Guardar Cambios"):
+            supabase.table("productos_maestro").upsert(ed.to_dict(orient='records')).execute(); st.rerun()
 
 def admin_usuarios(locales):
-    st.header("👤 Usuarios")
+    st.header("👤 Gestión de Usuarios")
     if 'u_act' not in st.session_state: st.session_state.u_act = None
     c1, c2, c3 = st.columns(3)
     with c1: 
-        if st.button("Admin"): st.session_state.u_act = "admin"
+        if st.button("Nuevo Admin"): st.session_state.u_act = "admin"
     with c2: 
-        if st.button("Staff"): st.session_state.u_act = "staff"
+        if st.button("Nuevo Staff"): st.session_state.u_act = "staff"
     with c3: 
-        if st.button("Edit"): st.session_state.u_act = "edit"
+        if st.button("Editar/Borrar"): st.session_state.u_act = "edit"
+    
     if st.session_state.u_act in ["admin", "staff"]:
-        with st.form("UF"):
+        with st.form("U_Form"):
             n = st.text_input("Nombre"); u = st.text_input("Usuario"); p = st.text_input("Clave")
             l_id = 1
             if st.session_state.u_act == "staff":
-                l_sel = st.selectbox("Sede", list(locales.keys())); l_id = locales[l_sel]
-            if st.form_submit_button("Guardar"):
+                l_sel = st.selectbox("Asignar Sede", list(locales.keys())); l_id = locales[l_sel]
+            if st.form_submit_button("Guardar Usuario"):
                 rol = "Admin" if st.session_state.u_act == "admin" else "Staff"
                 supabase.table("usuarios_sistema").upsert({"nombre_apellido": n, "id_local": l_id, "usuario": u, "clave": p, "rol": rol}, on_conflict="usuario").execute()
                 st.session_state.u_act = None; st.rerun()
     elif st.session_state.u_act == "edit":
         res = supabase.table("usuarios_sistema").select("*").execute().data
         if res:
-            u_sel = st.selectbox("Seleccione", [x['usuario'] for x in res])
+            u_sel = st.selectbox("Seleccione Usuario", [x['usuario'] for x in res])
             curr = next(x for x in res if x['usuario'] == u_sel)
-            with st.form("EF"):
+            with st.form("E_Form"):
                 en = st.text_input("Nombre", value=curr['nombre_apellido']); ep = st.text_input("Clave", value=curr['clave'])
                 if st.form_submit_button("Actualizar"):
                     supabase.table("usuarios_sistema").update({"nombre_apellido": en, "clave": ep}).eq("usuario", u_sel).execute(); st.rerun()
             st.markdown('<div class="red-btn">', unsafe_allow_html=True)
-            if st.button("Eliminar"):
+            if st.button("❌ ELIMINAR USUARIO"):
                 supabase.table("usuarios_sistema").delete().eq("usuario", u_sel).execute(); st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
 
@@ -220,22 +199,25 @@ def main():
             st.image("Logo AE.jpg", width=220)
             with st.form("Login"):
                 u = st.text_input("Usuario"); p = st.text_input("Clave", type="password")
-                if st.form_submit_button("Ingresar"):
+                if st.form_submit_button("INGRESAR"):
                     if u.lower() == "admin" and p == "654321.": 
                         st.session_state.auth_user = {"user": "Admin", "role": "Admin", "local": 1}; st.rerun()
                     res = supabase.table("usuarios_sistema").select("*").eq("usuario", u).eq("clave", p).execute().data
                     if res:
                         st.session_state.auth_user = {"user": u, "role": res[0]['rol'], "local": res[0]['id_local']}; st.rerun()
-                    else: st.error("Acceso denegado.")
+                    else: st.error("Usuario o clave incorrecta")
         return
+
     user = st.session_state.auth_user
     ld = get_locales_map(); li = {v: k for k, v in ld.items()}
     if 'opt' not in st.session_state: st.session_state.opt = "📋 Ingreso"
+    
     st.sidebar.image("Logo AE.jpg", use_container_width=True)
     if user['role'] == "Admin":
         idx = list(ld.keys()).index(li.get(user['local'], list(ld.keys())[0]))
-        user['local'] = ld[st.sidebar.selectbox("Sede:", list(ld.keys()), index=idx)]
-    st.sidebar.markdown(f'<div class="user-info">Usuario : {user["user"]}\nSede    : {li.get(user["local"], "N/A")}</div>', unsafe_allow_html=True)
+        user['local'] = ld[st.sidebar.selectbox("Sede Actual:", list(ld.keys()), index=idx)]
+    
+    st.sidebar.markdown(f'<div class="user-info">Sede: {li.get(user["local"], "N/A")}</div>', unsafe_allow_html=True)
     opts = ["📋 Ingreso", "📊 Reportes", "👤 Usuarios", "⚙️ Maestro"] if user['role'] == "Admin" else ["📋 Ingreso", "📊 Reportes"]
     for o in opts:
         act = "nav-active" if st.session_state.opt == o else ""
