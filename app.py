@@ -36,63 +36,41 @@ st.markdown(f"""
     [data-testid="stSidebar"] {{ background-color: #111111; border-right: 1px solid #333; }}
     .stMarkdown p, label p, .stHeader h1, .stHeader h2, .stExpander p, .stAlert p {{ color: #FFFFFF !important; }}
     
-    /* Botones generales Amarillos */
     div.stButton > button {{ 
         background-color: #FFCC00 !important; 
         color: #000000 !important; 
         font-weight: bold !important; 
-        min-width: 100% !important; 
         border-radius: 10px !important;
     }}
 
-    /* --- FIX CALCULADORA MÓVIL --- */
-    .calc-container {{
-        max-width: 360px;
-        margin: 0 auto;
+    /* --- FIX CALCULADORA MATRIZ 4X4 REAL --- */
+    /* Forzamos que el contenedor de la calculadora no permita columnas apiladas */
+    div[data-testid="stHorizontalBlock"]:has(div.calc-btn-num, div.calc-btn-op, div.calc-btn-clear) {{
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        gap: 5px !important;
     }}
 
-    /* FORZAR GRID EN MÓVIL: Evita que Streamlit apile las columnas */
-    [data-testid="column"] {{
-        width: calc(25% - 8px) !important;
-        flex: 1 1 calc(25% - 8px) !important;
-        min-width: 0px !important;
+    /* Forzamos que cada columna dentro de la calculadora mida exactamente el 25% */
+    div[data-testid="stHorizontalBlock"]:has(div.calc-btn-num, div.calc-btn-op, div.calc-btn-clear) div[data-testid="column"] {{
+        width: 25% !important;
+        min-width: 25% !important;
+        flex-basis: 25% !important;
     }}
 
     .calc-container button {{
         aspect-ratio: 1 / 1 !important;
         height: auto !important;
         width: 100% !important;
-        padding: 5px !important;
-        font-size: 20px !important;
-        border-radius: 12px !important;
+        padding: 2px !important;
+        font-size: 18px !important;
     }}
 
-    /* Estilo para números */
-    .calc-btn-num button {{
-        background-color: #FFCC00 !important;
-        color: #000000 !important;
-    }}
-
-    /* Estilo para operadores */
-    .calc-btn-op button {{
-        background-color: #333333 !important;
-        color: #FFCC00 !important;
-        border: 1px solid #FFCC00 !important;
-    }}
-
-    /* Botón Especial C */
-    .calc-btn-clear button {{
-        background-color: #440000 !important;
-        color: white !important;
-    }}
-
-    /* Botón Enter/Listo */
-    .calc-enter button {{
-        background-color: #1A73E8 !important;
-        color: white !important;
-        height: 50px !important;
-        aspect-ratio: auto !important;
-    }}
+    .calc-btn-num button {{ background-color: #FFCC00 !important; color: #000000 !important; }}
+    .calc-btn-op button {{ background-color: #333333 !important; color: #FFCC00 !important; border: 1px solid #FFCC00 !important; }}
+    .calc-btn-clear button {{ background-color: #440000 !important; color: white !important; }}
+    .calc-enter button {{ background-color: #1A73E8 !important; color: white !important; height: 50px !important; }}
 
     .nav-active > div > button {{ background-color: #FFFFFF !important; border: 2px solid #FFCC00 !important; }}
     .red-btn > div > button {{ background-color: #DD0000 !important; color: white !important; }}
@@ -120,7 +98,7 @@ def obtener_stock_dict(local_id):
         return df.groupby("id_producto")["cantidad"].sum().to_dict()
     except: return {}
 
-# --- 5. COMPONENTE CALCULADORA (FIXED 4X4) ---
+# --- 5. COMPONENTE CALCULADORA ---
 def calculadora_basica():
     if "calc_val" not in st.session_state: st.session_state.calc_val = ""
     
@@ -135,7 +113,7 @@ def calculadora_basica():
     
     st.markdown('<div class="calc-container">', unsafe_allow_html=True)
     
-    # Definición de filas para asegurar la cuadrícula
+    # Definición de la matriz 4x4
     filas = [
         [("7", "num"), ("8", "num"), ("9", "num"), ("/", "op")],
         [("4", "num"), ("5", "num"), ("6", "num"), ("*", "op")],
@@ -147,9 +125,8 @@ def calculadora_basica():
         cols = st.columns(4)
         for i, (label, tipo) in enumerate(fila):
             with cols[i]:
-                css_class = f"calc-btn-{tipo}"
-                st.markdown(f'<div class="{css_class}">', unsafe_allow_html=True)
-                if st.button(label, key=f"btn_calc_{label}_{filas.index(fila)}", use_container_width=True):
+                st.markdown(f'<div class="calc-btn-{tipo}">', unsafe_allow_html=True)
+                if st.button(label, key=f"btn_{label}_{filas.index(fila)}", use_container_width=True):
                     if label == "C": st.session_state.calc_val = ""
                     else: st.session_state.calc_val += label
                     st.rerun()
@@ -160,12 +137,12 @@ def calculadora_basica():
     st.write("")
     c1, c2 = st.columns(2)
     with c1:
-        if st.button("⬅️ Borrar"):
+        if st.button("⬅️ Borrar", use_container_width=True):
             st.session_state.calc_val = st.session_state.calc_val[:-1]
             st.rerun()
     with c2:
         st.markdown('<div class="calc-enter">', unsafe_allow_html=True)
-        if st.button("LISTO (Enter)", type="primary", use_container_width=True):
+        if st.button("LISTO", type="primary", use_container_width=True):
             try:
                 if st.session_state.calc_val:
                     res = float(eval(st.session_state.calc_val))
