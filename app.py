@@ -258,12 +258,11 @@ def admin_maestro(local_id):
             st.rerun()
 
 # ==========================================
-# 9. PANTALLA: USUARIOS (CON VISUALIZADOR)
+# 9. PANTALLA: USUARIOS (CON VISUALIZADOR Y CLAVES)
 # ==========================================
 def admin_usuarios(locales_map):
     st.header("👤 Gestión de Usuarios")
     
-    # --- PARTE 1: CREACIÓN ---
     if 'u_mode' not in st.session_state: st.session_state.u_mode = None
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -297,27 +296,23 @@ def admin_usuarios(locales_map):
 
     st.markdown("---")
     
-    # --- PARTE 2: VISUALIZADOR ---
     st.subheader("👥 Usuarios Registrados")
     try:
-        # Traemos usuarios y el nombre del local mediante un join implícito si es posible, 
-        # o procesamos localmente
         res_u = supabase.table("usuarios_sistema").select("*").execute().data
         if res_u:
             df_users = pd.DataFrame(res_u)
-            # Invertimos el mapa de locales para mostrar nombres en lugar de IDs
             locales_inv = {v: k for k, v in locales_map.items()}
             df_users['Sede'] = df_users['id_local'].map(locales_inv)
             
-            # Limpiamos para la vista
-            df_view = df_users[['nombre_apellido', 'usuario', 'rol', 'Sede']].copy()
-            df_view.columns = ['Nombre', 'Login', 'Rol', 'Sede']
+            # Se incluye la columna 'clave' tal como lo solicitaste
+            df_view = df_users[['nombre_apellido', 'usuario', 'clave', 'rol', 'Sede']].copy()
+            df_view.columns = ['Nombre', 'Login', 'Contraseña', 'Rol', 'Sede']
             
             st.dataframe(df_view, use_container_width=True)
         else:
-            st.info("No hay usuarios registrados en la base de datos.")
+            st.info("No hay usuarios registrados.")
     except Exception as e:
-        st.error(f"Error al cargar lista de usuarios: {e}")
+        st.error(f"Error: {e}")
 
 # ==========================================
 # 10. MAIN
