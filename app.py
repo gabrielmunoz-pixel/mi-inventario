@@ -5,7 +5,7 @@ import json
 from datetime import datetime
 from supabase import create_client, Client
 
-# --- 1. CONEXIÓN ---
+# --- 1. CONEXIÓN (Sin cambios) ---
 try:
     URL = st.secrets["SUPABASE_URL"]
     KEY = st.secrets["SUPABASE_KEY"]
@@ -14,7 +14,7 @@ except:
     st.error("Error de conexión con Supabase.")
     st.stop()
 
-# --- 2. GESTIÓN DE SESIÓN ---
+# --- 2. GESTIÓN DE SESIÓN (Sin cambios) ---
 def sync_session():
     params = st.query_params
     if "user_data" in params and "auth_user" not in st.session_state:
@@ -29,14 +29,13 @@ def logout():
     st.query_params.clear()
     st.rerun()
 
-# --- 3. DISEÑO VISUAL (GRID INDESTRUCTIBLE) ---
+# --- 3. DISEÑO VISUAL (GRID REFORMULADO) ---
 st.markdown(f"""
     <style>
     .stApp {{ background-color: #000000; }}
     [data-testid="stSidebar"] {{ background-color: #111111; border-right: 1px solid #333; }}
     .stMarkdown p, label p, .stHeader h1, .stHeader h2, .stExpander p, .stAlert p {{ color: #FFFFFF !important; }}
     
-    /* Botones generales */
     div.stButton > button {{ 
         background-color: #FFCC00 !important; 
         color: #000000 !important; 
@@ -45,43 +44,35 @@ st.markdown(f"""
     }}
 
     /* --- CONTENEDOR DE CALCULADORA --- */
-    /* Forzamos que el contenido del expander no tenga márgenes locos */
-    [data-testid="stExpander"] [data-testid="stVerticalBlock"] {{
-        gap: 0rem !important;
-    }}
-
-    /* ESTILO DE LA MATRIZ 4x4 USANDO CSS GRID */
-    .grid-calculadora {{
+    /* Este estilo fuerza a que Streamlit no rompa el diseño en móvil */
+    .calc-matrix {{
         display: grid !important;
-        grid-template-columns: repeat(4, 1fr) !important; /* 4 columnas iguales siempre */
+        grid-template-columns: repeat(4, 1fr) !important;
         gap: 8px !important;
         width: 100% !important;
-        margin: 0 auto !important;
+        max-width: 400px; /* Evita que en PC se vea gigante */
+        margin: 0 auto;
     }}
 
-    /* Estilo de los botones dentro del Grid */
-    .grid-calculadora button {{
-        aspect-ratio: 1 / 1 !important;
+    /* Estilo para los botones dentro de la matriz */
+    .calc-matrix div[data-testid="column"] {{
         width: 100% !important;
+        flex: none !important;
+        min-width: 0 !important;
+    }}
+
+    .calc-matrix button {{
+        aspect-ratio: 1 / 1 !important;
         height: auto !important;
-        font-size: 22px !important;
+        width: 100% !important;
+        font-size: 20px !important;
         padding: 0 !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
     }}
 
     .btn-num button {{ background-color: #FFCC00 !important; color: #000000 !important; }}
     .btn-op button {{ background-color: #333333 !important; color: #FFCC00 !important; border: 1px solid #FFCC00 !important; }}
     .btn-clear button {{ background-color: #440000 !important; color: white !important; }}
 
-    /* Botón LISTO más grande abajo */
-    .calc-footer {{
-        margin-top: 15px;
-        display: flex;
-        gap: 10px;
-    }}
-    
     .nav-active > div > button {{ background-color: #FFFFFF !important; border: 2px solid #FFCC00 !important; }}
     .red-btn > div > button {{ background-color: #DD0000 !important; color: white !important; }}
     .green-btn > div > button {{ background-color: #28a745 !important; color: white !important; }}
@@ -89,7 +80,7 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 4. FUNCIONES LÓGICAS ---
+# --- 4. FUNCIONES LÓGICAS (Sin cambios) ---
 def get_locales_map():
     try:
         res = supabase.table("locales").select("id, nombre").execute().data
@@ -108,19 +99,19 @@ def obtener_stock_dict(local_id):
         return df.groupby("id_producto")["cantidad"].sum().to_dict()
     except: return {}
 
-# --- 5. COMPONENTE CALCULADORA (REDiseñado con DIVs de GRID) ---
+# --- 5. COMPONENTE CALCULADORA (MATRIZ FORZADA) ---
 def calculadora_basica():
     if "calc_val" not in st.session_state: st.session_state.calc_val = ""
     
-    # Pantalla de la calculadora
+    # Pantalla LCD
     st.markdown(f"""
         <div style="background:#1e1e1e; color:#00ff00; padding:15px; border-radius:10px; 
-        text-align:right; font-family:monospace; font-size:32px; margin-bottom:15px; border:2px solid #333;">
+        text-align:right; font-family:monospace; font-size:28px; margin-bottom:10px; border:2px solid #333;">
             {st.session_state.calc_val if st.session_state.calc_val else "0"}
         </div>
     """, unsafe_allow_html=True)
     
-    # Definición de botones en orden de grid
+    # Definimos los botones
     botones = [
         ("7", "num"), ("8", "num"), ("9", "num"), ("/", "op"),
         ("4", "num"), ("5", "num"), ("6", "num"), ("*", "op"),
@@ -128,25 +119,21 @@ def calculadora_basica():
         ("0", "num"), (".", "num"), ("C", "clear"), ("+", "op")
     ]
     
-    # Creamos el contenedor Grid
-    st.markdown('<div class="grid-calculadora">', unsafe_allow_html=True)
-    # IMPORTANTE: Usamos columnas vacías de Streamlit solo como anclaje, 
-    # pero el CSS Grid las obligará a comportarse.
-    cols = st.columns(4) 
+    # Forzamos la cuadrícula mediante un contenedor que Streamlit no pueda romper
+    st.markdown('<div class="calc-matrix">', unsafe_allow_html=True)
+    cols = st.columns(4) # Creamos las columnas pero las controlaremos con CSS
     
     for i, (label, tipo) in enumerate(botones):
-        # Usamos el operador módulo para rotar entre las 4 columnas
         with cols[i % 4]:
             st.markdown(f'<div class="btn-{tipo}">', unsafe_allow_html=True)
-            if st.button(label, key=f"grid_btn_{label}_{i}"):
+            if st.button(label, key=f"btn_{label}_{i}", use_container_width=True):
                 if label == "C": st.session_state.calc_val = ""
                 else: st.session_state.calc_val += label
                 st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # Botones de acción inferior
-    st.markdown('<div class="calc-footer">', unsafe_allow_html=True)
+    st.write("")
     c1, c2 = st.columns(2)
     with c1:
         if st.button("⬅️ Borrar", use_container_width=True):
@@ -161,9 +148,8 @@ def calculadora_basica():
                     st.session_state.calc_val = ""
                     st.rerun()
             except: st.error("Error")
-    st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 6. PANTALLAS --- (Todo igual que tu original)
+# --- 6. PANTALLAS (Sin cambios) ---
 def ingreso_inventario_pantalla(local_id, user_key):
     st.header("📋 Ingreso de Inventario")
     if 'carritos' not in st.session_state: st.session_state.carritos = {}
