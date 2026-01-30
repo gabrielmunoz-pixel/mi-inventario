@@ -29,7 +29,7 @@ def logout():
     st.query_params.clear()
     st.rerun()
 
-# --- 3. DISEÑO VISUAL (REPARADO) ---
+# --- 3. DISEÑO VISUAL ---
 st.markdown(f"""
     <style>
     .stApp {{ background-color: #000000; }}
@@ -41,7 +41,6 @@ st.markdown(f"""
     .red-btn > div > button {{ background-color: #DD0000 !important; color: white !important; }}
     .green-btn > div > button {{ background-color: #28a745 !important; color: white !important; }}
     .user-info {{ font-family: monospace; color: #FFCC00; font-size: 12px; margin-bottom: 10px; }}
-    /* ESTO EVITA EL TEXTO BLANCO EN EL MAESTRO */
     [data-testid="stDataFrame"] *, [data-testid="stTable"] * {{ color: inherit !important; }}
     </style>
     """, unsafe_allow_html=True)
@@ -130,32 +129,51 @@ def reportes_pantalla(local_id):
 
 def admin_maestro(local_id):
     st.header("⚙️ Maestro de Productos")
+    
+    # --- RE-INCORPORACIÓN: CARGA MASIVA ---
+    with st.expander("📤 Carga Masiva (Excel / CSV)"):
+        up = st.file_uploader("Subir archivo de productos", type=["xlsx", "csv"])
+        if up and st.button("Procesar Archivo"):
+            try:
+                df_up = pd.read_csv(up) if up.name.endswith('.csv') else pd.read_excel(up)
+                # Mapeo de nombres de columnas del usuario a la BD
+                mapeo = {
+                    "Número de artículo": "sku",
+                    "Descripción del artículo": "nombre",
+                    "Categoria": "categoria"
+                }
+                df_up = df_up.rename(columns=mapeo)
+                # Asegurar que existan columnas mínimas
+                if 'formato_medida' not in df_up.columns: df_up['formato_medida'] = "1 unidad"
+                
+                # Upsert a Supabase
+                supabase.table("productos_maestro").upsert(df_up.to_dict(orient='records'), on_conflict="sku").execute()
+                st.success("✅ Productos cargados/actualizados correctamente"); st.rerun()
+            except Exception as e: st.error(f"Error en carga: {e}")
+
+    # --- EDICIÓN DIRECTA ---
     res = supabase.table("productos_maestro").select("*").execute().data
-    if not res: return
-    
-    st_dict = obtener_stock_dict(local_id)
-    df_m = pd.DataFrame(res)
-    # Calculamos el stock actual para mostrarlo en el editor
-    df_m['Stock Actual'] = df_m.apply(lambda r: round(st_dict.get(r['id'], 0) / extraer_valor_formato(r['formato_medida']), 2), axis=1)
-    
-    ed = st.data_editor(df_m, column_config={"id": None}, num_rows="dynamic", use_container_width=True)
-    
-    if st.button("💾 Guardar Cambios"):
-        for i, row in ed.iterrows():
-            orig = df_m.iloc[i] if i < len(df_m) else None
-            # Upsert de datos básicos
-            supabase.table("productos_maestro").upsert({
-                "id": row['id'], "sku": row['sku'], "nombre": row['nombre'], 
-                "categoria": row['categoria'], "formato_medida": row['formato_medida']
-            }).execute()
-            # Ajuste de stock si cambió
-            if orig is not None and row['Stock Actual'] != orig['Stock Actual']:
-                diff = (row['Stock Actual'] - orig['Stock Actual']) * extraer_valor_formato(row['formato_medida'])
-                supabase.table("movimientos_inventario").insert({
-                    "id_local": local_id, "id_producto": row['id'], 
-                    "cantidad": diff, "tipo_movimiento": "AJUSTE", "ubicacion": "Corrección Maestro"
+    if res:
+        st_dict = obtener_stock_dict(local_id)
+        df_m = pd.DataFrame(res)
+        df_m['Stock Actual'] = df_m.apply(lambda r: round(st_dict.get(r['id'], 0) / extraer_valor_formato(r['formato_medida']), 2), axis=1)
+        
+        ed = st.data_editor(df_m, column_config={"id": None}, num_rows="dynamic", use_container_width=True)
+        
+        if st.button("💾 Guardar Cambios"):
+            for i, row in ed.iterrows():
+                orig = df_m.iloc[i] if i < len(df_m) else None
+                supabase.table("productos_maestro").upsert({
+                    "id": row['id'], "sku": row['sku'], "nombre": row['nombre'], 
+                    "categoria": row['categoria'], "formato_medida": row['formato_medida']
                 }).execute()
-        st.success("Maestro y Stock actualizados"); st.rerun()
+                if orig is not None and row['Stock Actual'] != orig['Stock Actual']:
+                    diff = (row['Stock Actual'] - orig['Stock Actual']) * extraer_valor_formato(row['formato_medida'])
+                    supabase.table("movimientos_inventario").insert({
+                        "id_local": local_id, "id_producto": row['id'], 
+                        "cantidad": diff, "tipo_movimiento": "AJUSTE", "ubicacion": "Corrección Maestro"
+                    }).execute()
+            st.success("Actualizado"); st.rerun()
 
 def admin_usuarios(locales):
     st.header("👤 Usuarios")
