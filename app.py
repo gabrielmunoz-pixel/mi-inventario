@@ -182,25 +182,54 @@ def ingreso_inventario_pantalla(local_id, user_key):
         st.subheader("🛒 Pre-ingreso")
         df_carrito = pd.DataFrame(st.session_state.carritos[user_key])
         ed = st.data_editor(df_carrito, column_config={"id_producto": None, "Factor": None}, use_container_width=True, key=f"ed_{user_key}")
+        
         col_fin, col_del = st.columns(2)
+        
         with col_fin:
             st.markdown('<div class="green-btn">', unsafe_allow_html=True)
-            if st.button("🚀 FINALIZAR Y GUARDAR"):
-                for r in ed.to_dict(orient='records'):
-                    supabase.table("movimientos_inventario").insert({
-                        "id_local": local_id, "id_producto": r['id_producto'],
-                        "cantidad": r['Cantidad'] * r['Factor'],
-                        "tipo_movimiento": "AJUSTE", "ubicacion": r['Ubicación']
-                    }).execute()
-                st.success("Guardado.")
-                st.session_state.carritos[user_key] = []
-                st.rerun()
+            if 'confirm_guardar' not in st.session_state: st.session_state.confirm_guardar = False
+            
+            if not st.session_state.confirm_guardar:
+                if st.button("🚀 FINALIZAR Y GUARDAR"):
+                    st.session_state.confirm_guardar = True
+                    st.rerun()
+            else:
+                st.warning("Confirmas que deseas ingresar las mercaderías?")
+                c_si, c_no = st.columns(2)
+                if c_si.button("✅ SÍ"):
+                    for r in ed.to_dict(orient='records'):
+                        supabase.table("movimientos_inventario").insert({
+                            "id_local": local_id, "id_producto": r['id_producto'],
+                            "cantidad": r['Cantidad'] * r['Factor'],
+                            "tipo_movimiento": "AJUSTE", "ubicacion": r['Ubicación']
+                        }).execute()
+                    st.success("Guardado.")
+                    st.session_state.carritos[user_key] = []
+                    st.session_state.confirm_guardar = False
+                    st.rerun()
+                if c_no.button("❌ NO"):
+                    st.session_state.confirm_guardar = False
+                    st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
+
         with col_del:
             st.markdown('<div class="red-btn">', unsafe_allow_html=True)
-            if st.button("🗑️ VACIAR"):
-                st.session_state.carritos[user_key] = []
-                st.rerun()
+            if 'confirm_vaciar' not in st.session_state: st.session_state.confirm_vaciar = False
+            
+            if not st.session_state.confirm_vaciar:
+                if st.button("🗑️ VACIAR"):
+                    st.session_state.confirm_vaciar = True
+                    st.rerun()
+            else:
+                st.error("¿Confirmas que deseas descartar el inventario?")
+                v_si, v_no = st.columns(2)
+                if v_si.button("🗑️ SÍ, VACIAR"):
+                    st.session_state.carritos[user_key] = []
+                    st.session_state.confirm_vaciar = False
+                    st.rerun()
+                if v_no.button("🔙 VOLVER"):
+                    st.session_state.confirm_vaciar = False
+                    st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
 
 # ==========================================
@@ -258,7 +287,7 @@ def admin_maestro(local_id):
             st.rerun()
 
 # ==========================================
-# 9. PANTALLA: USUARIOS (CON VISUALIZADOR Y CLAVES)
+# 9. PANTALLA: USUARIOS
 # ==========================================
 def admin_usuarios(locales_map):
     st.header("👤 Gestión de Usuarios")
@@ -303,11 +332,8 @@ def admin_usuarios(locales_map):
             df_users = pd.DataFrame(res_u)
             locales_inv = {v: k for k, v in locales_map.items()}
             df_users['Sede'] = df_users['id_local'].map(locales_inv)
-            
-            # Se incluye la columna 'clave' tal como lo solicitaste
             df_view = df_users[['nombre_apellido', 'usuario', 'clave', 'rol', 'Sede']].copy()
             df_view.columns = ['Nombre', 'Login', 'Contraseña', 'Rol', 'Sede']
-            
             st.dataframe(df_view, use_container_width=True)
         else:
             st.info("No hay usuarios registrados.")
