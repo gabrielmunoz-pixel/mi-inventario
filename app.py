@@ -82,7 +82,7 @@ def obtener_stock_dict(local_id):
     except: return {}
 
 # ==========================================
-# 5. CALCULADORA (CON VALIDADOR)
+# 5. CALCULADORA
 # ==========================================
 def calculadora_basica():
     calc_html = """
@@ -156,14 +156,12 @@ def calculadora_basica():
             try {
                 let val = eval(current);
                 if(!isNaN(val)) { 
-                    // VALIDADOR JS: Alerta para confirmar que el botón funciona
-                    alert("JavaScript enviando: " + val);
                     window.parent.postMessage({
                         type: "streamlit:setComponentValue", 
                         value: {"monto": parseFloat(val), "t": Date.now()}
                     }, "*"); 
                 }
-            } catch(e) { alert("Error al evaluar: " + e); }
+            } catch(e) { console.error("Error al enviar: " + e); }
         }
     </script>
     """
@@ -210,17 +208,13 @@ def ingreso_inventario_pantalla(local_id, user_key):
 
         if st.session_state.show_calc:
             with st.expander("Calculadora", expanded=True):
-                # VALIDADOR PYTHON: Ver qué llega al script
-                calc_val = calculadora_basica()
-                st.write(f"DEBUG RECEPCIÓN: {calc_val}")
+                # CAPTURA CORRECTA: Validamos que el retorno sea un diccionario
+                calc_response = calculadora_basica()
                 
-                if calc_val is not None:
-                    try:
-                        # Extraemos el valor del objeto recibido
-                        st.session_state.resultado_calc = float(calc_val["monto"])
-                        st.session_state.show_calc = False
-                        st.rerun()
-                    except: pass
+                if isinstance(calc_response, dict) and "monto" in calc_response:
+                    st.session_state.resultado_calc = float(calc_response["monto"])
+                    st.session_state.show_calc = False
+                    st.rerun()
 
         if st.button("Añadir a la lista"):
             st.session_state.carritos[user_key].append({
