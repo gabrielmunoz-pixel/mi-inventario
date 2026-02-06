@@ -123,7 +123,6 @@ def calculadora_basica():
 
         function updateDisplay() {
             display.innerText = current || "0";
-            // Auto-scroll a la derecha para ver siempre el último número
             display.scrollLeft = display.scrollWidth;
         }
 
@@ -156,7 +155,9 @@ def calculadora_basica():
         function sendResult() {
             try {
                 let val = eval(current);
-                if(!isNaN(val)) { window.parent.postMessage({type: "streamlit:setComponentValue", value: val}, "*"); }
+                if(!isNaN(val)) { 
+                    window.parent.postMessage({type: "streamlit:setComponentValue", value: parseFloat(val)}, "*"); 
+                }
             } catch(e) {}
         }
     </script>
@@ -171,7 +172,8 @@ def ingreso_inventario_pantalla(local_id, user_key):
     if 'carritos' not in st.session_state: st.session_state.carritos = {}
     if user_key not in st.session_state.carritos: st.session_state.carritos[user_key] = []
     if 'show_calc' not in st.session_state: st.session_state.show_calc = False
-    if 'resultado_calc' not in st.session_state: st.session_state.resultado_calc = 0.0
+    # CAMBIO: Iniciamos en None para que el campo esté vacío
+    if 'resultado_calc' not in st.session_state: st.session_state.resultado_calc = None
 
     res = supabase.table("productos_maestro").select("*").execute().data
     if not res:
@@ -188,9 +190,12 @@ def ingreso_inventario_pantalla(local_id, user_key):
         with c1: ubi = st.selectbox("Ubicación:", ["Bodega", "Frío", "Cocina", "Producción"])
         with c2:
             placeholder_cant = st.empty()
+            # CAMBIO: Si resultado_calc es None, pasamos None al value para limpiar el campo
+            val_a_mostrar = float(st.session_state.resultado_calc) if st.session_state.resultado_calc is not None else None
             cant = placeholder_cant.number_input(
-                "Cantidad:", min_value=0.0, 
-                value=float(st.session_state.resultado_calc),
+                "Cantidad:", 
+                min_value=0.0, 
+                value=val_a_mostrar,
                 key=f"input_cant_{st.session_state.resultado_calc}"
             )
         with c3:
@@ -210,13 +215,16 @@ def ingreso_inventario_pantalla(local_id, user_key):
                     except: pass
 
         if st.button("Añadir a la lista"):
-            st.session_state.carritos[user_key].append({
-                "id_producto": p['id'], "Producto": p['nombre'], "Ubicación": ubi,
-                "Cantidad": float(cant), "Formato": p['formato_medida'], "Factor": extraer_valor_formato(p['formato_medida'])
-            })
-            st.toast("✅ Añadido")
-            st.session_state.resultado_calc = 0.0
-            st.rerun()
+            if cant is not None and cant > 0:
+                st.session_state.carritos[user_key].append({
+                    "id_producto": p['id'], "Producto": p['nombre'], "Ubicación": ubi,
+                    "Cantidad": float(cant), "Formato": p['formato_medida'], "Factor": extraer_valor_formato(p['formato_medida'])
+                })
+                st.toast("✅ Añadido")
+                st.session_state.resultado_calc = None
+                st.rerun()
+            else:
+                st.warning("Ingresa una cantidad válida.")
 
     if st.session_state.carritos[user_key]:
         st.subheader("🛒 Pre-ingreso")
