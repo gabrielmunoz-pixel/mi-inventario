@@ -82,44 +82,82 @@ def obtener_stock_dict(local_id):
     except: return {}
 
 # ==========================================
-# 5. CALCULADORA
+# 5. CALCULADORA (MEJORADA)
 # ==========================================
 def calculadora_basica():
     calc_html = """
     <div id="calc-container" style="background: #000; padding: 10px; border-radius: 15px; font-family: sans-serif;">
-        <div id="display" style="background: #1e1e1e; color: #00ff00; padding: 15px; text-align: right; font-size: 28px; border-radius: 10px; margin-bottom: 15px; min-height: 40px; border: 2px solid #333;">0</div>
+        <div id="display" style="background: #1e1e1e; color: #00ff00; padding: 15px; text-align: right; font-size: 28px; border-radius: 10px; margin-bottom: 15px; min-height: 40px; border: 2px solid #333; overflow-x: auto; white-space: nowrap; scrollbar-width: none;">0</div>
+        
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
             <button onclick="press('7')" style="height: 45px; background: #FFCC00; border-radius: 8px; font-weight: bold;">7</button>
             <button onclick="press('8')" style="height: 45px; background: #FFCC00; border-radius: 8px; font-weight: bold;">8</button>
             <button onclick="press('9')" style="height: 45px; background: #FFCC00; border-radius: 8px; font-weight: bold;">9</button>
             <button onclick="press('/')" style="height: 45px; background: #333; color: #FFCC00; border: 1px solid #FFCC00; border-radius: 8px;">/</button>
+            
             <button onclick="press('4')" style="height: 45px; background: #FFCC00; border-radius: 8px; font-weight: bold;">4</button>
             <button onclick="press('5')" style="height: 45px; background: #FFCC00; border-radius: 8px; font-weight: bold;">5</button>
             <button onclick="press('6')" style="height: 45px; background: #FFCC00; border-radius: 8px; font-weight: bold;">6</button>
             <button onclick="press('*')" style="height: 45px; background: #333; color: #FFCC00; border: 1px solid #FFCC00; border-radius: 8px;">*</button>
+            
             <button onclick="press('1')" style="height: 45px; background: #FFCC00; border-radius: 8px; font-weight: bold;">1</button>
             <button onclick="press('2')" style="height: 45px; background: #FFCC00; border-radius: 8px; font-weight: bold;">2</button>
             <button onclick="press('3')" style="height: 45px; background: #FFCC00; border-radius: 8px; font-weight: bold;">3</button>
             <button onclick="press('-')" style="height: 45px; background: #333; color: #FFCC00; border: 1px solid #FFCC00; border-radius: 8px;">-</button>
+            
             <button onclick="press('0')" style="height: 45px; background: #FFCC00; border-radius: 8px; font-weight: bold;">0</button>
             <button onclick="press('.')" style="height: 45px; background: #FFCC00; border-radius: 8px; font-weight: bold;">.</button>
             <button onclick="solve()" style="height: 45px; background: #1A73E8; color: white; border-radius: 8px; font-weight: bold;">=</button>
             <button onclick="press('+')" style="height: 45px; background: #333; color: #FFCC00; border: 1px solid #FFCC00; border-radius: 8px;">+</button>
         </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px;">
-            <button onclick="clearCalc()" style="padding: 12px; background: #440000; color: white; border-radius: 8px;">Limpiar</button>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 15px;">
+            <button onclick="clearCalc()" style="padding: 12px; background: #440000; color: white; border-radius: 8px; font-size: 12px;">C</button>
+            <button onclick="backspace()" style="padding: 12px; background: #666; color: white; border-radius: 8px; font-size: 12px;">DEL</button>
             <button onclick="sendResult()" style="padding: 12px; background: #1A73E8; color: white; border-radius: 8px; font-weight: bold;">LISTO</button>
         </div>
     </div>
     <script>
         let current = "";
         const display = document.getElementById('display');
-        function press(val) { current += val; display.innerText = current; }
-        function clearCalc() { current = ""; display.innerText = "0"; }
-        function solve() { try { current = eval(current).toString(); display.innerText = current; } catch(e) { display.innerText="Error"; current=""; } }
+
+        function updateDisplay() {
+            display.innerText = current || "0";
+            // Auto-scroll a la derecha para ver siempre el último número
+            display.scrollLeft = display.scrollWidth;
+        }
+
+        function press(val) { 
+            current += val; 
+            updateDisplay();
+        }
+
+        function clearCalc() { 
+            current = ""; 
+            updateDisplay();
+        }
+
+        function backspace() {
+            current = current.toString().slice(0, -1);
+            updateDisplay();
+        }
+
+        function solve() { 
+            try { 
+                if(current === "") return;
+                current = eval(current).toString(); 
+                updateDisplay();
+            } catch(e) { 
+                display.innerText="Error"; 
+                current=""; 
+            } 
+        }
+
         function sendResult() {
-            let val = eval(current);
-            if(!isNaN(val)) { window.parent.postMessage({type: "streamlit:setComponentValue", value: val}, "*"); }
+            try {
+                let val = eval(current);
+                if(!isNaN(val)) { window.parent.postMessage({type: "streamlit:setComponentValue", value: val}, "*"); }
+            } catch(e) {}
         }
     </script>
     """
@@ -235,7 +273,7 @@ def ingreso_inventario_pantalla(local_id, user_key):
             st.markdown('</div>', unsafe_allow_html=True)
 
 # ==========================================
-# NUEVO: PANTALLA AUDITORÍA (MÓDULO DE COMPARACIÓN)
+# PANTALLA AUDITORÍA
 # ==========================================
 def auditoria_pantalla(local_id):
     st.header("🔎 Módulo de Auditoría")
@@ -243,7 +281,6 @@ def auditoria_pantalla(local_id):
     
     if 'audit_list' not in st.session_state: st.session_state.audit_list = []
     
-    # Obtener stock actual para comparar
     stock_actual = obtener_stock_dict(local_id)
     res_prod = supabase.table("productos_maestro").select("*").execute().data
     
@@ -264,7 +301,6 @@ def auditoria_pantalla(local_id):
             cant_fisica = c1.number_input("Conteo Físico:", min_value=0.0, step=0.1)
             
             if c2.button("Registrar Comparación"):
-                # Evitar duplicados en la lista de auditoría actual
                 st.session_state.audit_list = [i for i in st.session_state.audit_list if i['id'] != p['id']]
                 
                 st.session_state.audit_list.append({
@@ -280,25 +316,13 @@ def auditoria_pantalla(local_id):
     if st.session_state.audit_list:
         st.subheader("📋 Lista de Comparación")
         df_audit = pd.DataFrame(st.session_state.audit_list)
-        
-        # Estilo para resaltar diferencias
-        def style_diff(v):
-            if v < 0: return 'color: #ff4b4b;'
-            if v > 0: return 'color: #28a745;'
-            return ''
-
-        st.dataframe(
-            df_audit.drop(columns=['id']), 
-            use_container_width=True,
-            hide_index=True
-        )
+        st.dataframe(df_audit.drop(columns=['id']), use_container_width=True, hide_index=True)
         
         col_acc1, col_acc2 = st.columns(2)
         if col_acc1.button("🗑️ Limpiar Lista"):
             st.session_state.audit_list = []
             st.rerun()
             
-        # Opción para exportar
         csv = df_audit.to_csv(index=False).encode('utf-8')
         col_acc2.download_button("📥 Descargar Reporte (CSV)", csv, "auditoria.csv", "text/csv")
 
@@ -357,11 +381,10 @@ def admin_maestro(local_id):
             st.rerun()
 
 # ==========================================
-# 9. PANTALLA: USUARIOS (ACTUALIZADA PARA MULTIPERFIL)
+# 9. PANTALLA: USUARIOS
 # ==========================================
 def admin_usuarios(locales_map):
     st.header("👤 Gestión de Usuarios")
-    
     if 'u_mode' not in st.session_state: st.session_state.u_mode = None
     c1, c2 = st.columns(2)
     if c1.button("➕ Nuevo Usuario"): st.session_state.u_mode = "Nuevo"
@@ -373,16 +396,11 @@ def admin_usuarios(locales_map):
             nombre = st.text_input("Nombre Completo")
             user_log = st.text_input("Usuario (Login)")
             pw = st.text_input("Contraseña", type="password")
-            
-            # Selección de múltiples roles
             roles_asignados = st.multiselect("Asignar Perfiles:", ["Admin", "Staff", "Auditor"])
-            
             l_sel = st.selectbox("Sede Asignada", list(locales_map.keys()))
             l_id = locales_map[l_sel]
-            
             if st.form_submit_button("Registrar"):
                 if nombre and user_log and pw and roles_asignados:
-                    # Guardamos el rol como JSON string para manejar la lista
                     supabase.table("usuarios_sistema").upsert({
                         "nombre_apellido": nombre, "id_local": l_id, 
                         "usuario": user_log, "clave": pw, "rol": json.dumps(roles_asignados)
@@ -390,26 +408,21 @@ def admin_usuarios(locales_map):
                     st.success("Registrado.")
                     st.session_state.u_mode = None
                     st.rerun()
-                else:
-                    st.warning("Completa todos los campos y selecciona al menos un rol.")
+                else: st.warning("Completa los campos.")
 
     st.markdown("---")
-    st.subheader("👥 Usuarios Registrados")
     try:
         res_u = supabase.table("usuarios_sistema").select("*").execute().data
         if res_u:
             df_users = pd.DataFrame(res_u)
             locales_inv = {v: k for k, v in locales_map.items()}
             df_users['Sede'] = df_users['id_local'].map(locales_inv)
-            
-            # Limpiar visualización de roles
             def clean_roles(r):
                 try: return ", ".join(json.loads(r)) if "[" in r else r
                 except: return r
-            
             df_users['Perfiles'] = df_users['rol'].apply(clean_roles)
             st.dataframe(df_users[['nombre_apellido', 'usuario', 'Perfiles', 'Sede']], use_container_width=True)
-    except Exception as e: st.error(f"Error: {e}")
+    except: pass
 
 # ==========================================
 # 10. MAIN
@@ -429,13 +442,10 @@ def main():
                         st.rerun()
                     res = supabase.table("usuarios_sistema").select("*").eq("usuario", u).eq("clave", p).execute().data
                     if res:
-                        # Parsear roles si vienen como JSON
                         try: 
                             roles = json.loads(res[0]['rol'])
                             if not isinstance(roles, list): roles = [roles]
-                        except: 
-                            roles = [res[0]['rol']]
-                            
+                        except: roles = [res[0]['rol']]
                         st.session_state.auth_user = {"user": res[0]['usuario'], "role": roles, "local": res[0]['id_local']}
                         st.rerun()
                     else: st.error("Error de login.")
@@ -445,7 +455,6 @@ def main():
     locales = get_locales_map()
     locales_inv = {v: k for k, v in locales.items()}
     
-    # Lógica de cambio de sede para Admins
     if "Admin" in user['role'] and locales:
         actual_name = locales_inv.get(user['local'], list(locales.keys())[0])
         idx = list(locales.keys()).index(actual_name)
@@ -455,20 +464,13 @@ def main():
     st.sidebar.image("Logo AE.jpg", use_container_width=True)
     st.sidebar.markdown(f'<div class="user-info">👤 {user["user"]}<br>📍 {locales_inv.get(user["local"], "N/A")}</div>', unsafe_allow_html=True)
     
-    # --- CONSTRUCCIÓN DINÁMICA DEL MENÚ ---
     menu_options = []
-    if "Staff" in user['role'] or "Admin" in user['role']:
-        menu_options.extend(["📋 Ingreso", "📊 Reportes"])
-    if "Auditor" in user['role'] or "Admin" in user['role']:
-        if "🔎 Auditoría" not in menu_options: menu_options.append("🔎 Auditoría")
-    if "Admin" in user['role']:
-        menu_options.extend(["👤 Usuarios", "⚙️ Maestro"])
+    if "Staff" in user['role'] or "Admin" in user['role']: menu_options.extend(["📋 Ingreso", "📊 Reportes"])
+    if "Auditor" in user['role'] or "Admin" in user['role']: menu_options.append("🔎 Auditoría")
+    if "Admin" in user['role']: menu_options.extend(["👤 Usuarios", "⚙️ Maestro"])
     
-    # Limpiar duplicados manteniendo el orden
     menu = list(dict.fromkeys(menu_options))
-    
-    if 'opt' not in st.session_state or st.session_state.opt not in menu: 
-        st.session_state.opt = menu[0]
+    if 'opt' not in st.session_state or st.session_state.opt not in menu: st.session_state.opt = menu[0]
     
     for item in menu:
         estilo = "nav-active" if st.session_state.opt == item else ""
@@ -480,7 +482,6 @@ def main():
     
     if st.sidebar.button("🚪 SALIR"): logout()
     
-    # --- NAVEGACIÓN ---
     if st.session_state.opt == "📋 Ingreso": ingreso_inventario_pantalla(user['local'], user['user'])
     elif st.session_state.opt == "📊 Reportes": reportes_pantalla(user['local'])
     elif st.session_state.opt == "🔎 Auditoría": auditoria_pantalla(user['local'])
