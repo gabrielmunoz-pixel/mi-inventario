@@ -82,7 +82,7 @@ def obtener_stock_dict(local_id):
     except: return {}
 
 # ==========================================
-# 5. CALCULADORA (MEJORADA)
+# 5. CALCULADORA (CORREGIDA)
 # ==========================================
 def calculadora_basica():
     calc_html = """
@@ -172,8 +172,9 @@ def ingreso_inventario_pantalla(local_id, user_key):
     if 'carritos' not in st.session_state: st.session_state.carritos = {}
     if user_key not in st.session_state.carritos: st.session_state.carritos[user_key] = []
     if 'show_calc' not in st.session_state: st.session_state.show_calc = False
-    # CAMBIO: Iniciamos en None para que el campo esté vacío
     if 'resultado_calc' not in st.session_state: st.session_state.resultado_calc = None
+    # Mejora: Key para resetear el buscador
+    if 'prod_search_key' not in st.session_state: st.session_state.prod_search_key = 0
 
     res = supabase.table("productos_maestro").select("*").execute().data
     if not res:
@@ -182,7 +183,9 @@ def ingreso_inventario_pantalla(local_id, user_key):
 
     prod_map = {f"{p['nombre']} | {p['formato_medida']}": p for p in res}
     opciones = sorted(list(prod_map.keys()))
-    sel = st.selectbox("Selecciona producto:", [""] + opciones)
+    
+    # Mejora: El key dinámico search_key permite limpiar el buscador al cambiar el valor
+    sel = st.selectbox("Selecciona producto:", [""] + opciones, key=f"search_{st.session_state.prod_search_key}")
     
     if sel:
         p = prod_map[sel]
@@ -190,11 +193,9 @@ def ingreso_inventario_pantalla(local_id, user_key):
         with c1: ubi = st.selectbox("Ubicación:", ["Bodega", "Frío", "Cocina", "Producción"])
         with c2:
             placeholder_cant = st.empty()
-            # CAMBIO: Si resultado_calc es None, pasamos None al value para limpiar el campo
             val_a_mostrar = float(st.session_state.resultado_calc) if st.session_state.resultado_calc is not None else None
             cant = placeholder_cant.number_input(
-                "Cantidad:", 
-                min_value=0.0, 
+                "Cantidad:", min_value=0.0, 
                 value=val_a_mostrar,
                 key=f"input_cant_{st.session_state.resultado_calc}"
             )
@@ -215,16 +216,15 @@ def ingreso_inventario_pantalla(local_id, user_key):
                     except: pass
 
         if st.button("Añadir a la lista"):
-            if cant is not None and cant > 0:
-                st.session_state.carritos[user_key].append({
-                    "id_producto": p['id'], "Producto": p['nombre'], "Ubicación": ubi,
-                    "Cantidad": float(cant), "Formato": p['formato_medida'], "Factor": extraer_valor_formato(p['formato_medida'])
-                })
-                st.toast("✅ Añadido")
-                st.session_state.resultado_calc = None
-                st.rerun()
-            else:
-                st.warning("Ingresa una cantidad válida.")
+            st.session_state.carritos[user_key].append({
+                "id_producto": p['id'], "Producto": p['nombre'], "Ubicación": ubi,
+                "Cantidad": float(cant if cant is not None else 0), "Formato": p['formato_medida'], "Factor": extraer_valor_formato(p['formato_medida'])
+            })
+            st.toast("✅ Añadido")
+            # Mejora: Resetear valores y cambiar key del buscador para limpiarlo
+            st.session_state.resultado_calc = None
+            st.session_state.prod_search_key += 1
+            st.rerun()
 
     if st.session_state.carritos[user_key]:
         st.subheader("🛒 Pre-ingreso")
@@ -288,6 +288,8 @@ def auditoria_pantalla(local_id):
     st.info("Este módulo es de comparación temporal. Los datos no se guardan en la DB.")
     
     if 'audit_list' not in st.session_state: st.session_state.audit_list = []
+    # Mejora: Key para resetear el buscador en auditoría
+    if 'audit_search_key' not in st.session_state: st.session_state.audit_search_key = 1000
     
     stock_actual = obtener_stock_dict(local_id)
     res_prod = supabase.table("productos_maestro").select("*").execute().data
@@ -299,14 +301,15 @@ def auditoria_pantalla(local_id):
     prod_map = {f"{p['nombre']} | {p['formato_medida']}": p for p in res_prod}
     
     with st.expander("➕ Añadir Producto a Revisión", expanded=True):
-        sel = st.selectbox("Selecciona producto:", [""] + sorted(list(prod_map.keys())), key="audit_sel")
+        # Mejora: Key dinámica para limpiar buscador
+        sel = st.selectbox("Selecciona producto:", [""] + sorted(list(prod_map.keys())), key=f"audit_sel_{st.session_state.audit_search_key}")
         if sel:
             p = prod_map[sel]
             factor = extraer_valor_formato(p['formato_medida'])
             stock_sistema = round(stock_actual.get(p['id'], 0) / factor, 2)
             
             c1, c2 = st.columns(2)
-            cant_fisica = c1.number_input("Conteo Físico:", min_value=0.0, step=0.1)
+            cant_fisica = c1.number_input("Conteo Físico:", min_value=0.0, step=0.1, value=None)
             
             if c2.button("Registrar Comparación"):
                 st.session_state.audit_list = [i for i in st.session_state.audit_list if i['id'] != p['id']]
@@ -316,9 +319,11 @@ def auditoria_pantalla(local_id):
                     "Producto": p['nombre'],
                     "Formato": p['formato_medida'],
                     "Sistema": stock_sistema,
-                    "Físico": cant_fisica,
-                    "Diferencia": round(cant_fisica - stock_sistema, 2)
+                    "Físico": cant_fisica if cant_fisica is not None else 0,
+                    "Diferencia": round((cant_fisica if cant_fisica is not None else 0) - stock_sistema, 2)
                 })
+                # Mejora: Resetear buscador auditoría
+                st.session_state.audit_search_key += 1
                 st.rerun()
 
     if st.session_state.audit_list:
