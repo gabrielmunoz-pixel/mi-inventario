@@ -82,7 +82,7 @@ def obtener_stock_dict(local_id):
     except: return {}
 
 # ==========================================
-# 5. CALCULADORA (CORREGIDA)
+# 5. CALCULADORA (CON VALIDADOR)
 # ==========================================
 def calculadora_basica():
     calc_html = """
@@ -156,9 +156,14 @@ def calculadora_basica():
             try {
                 let val = eval(current);
                 if(!isNaN(val)) { 
-                    window.parent.postMessage({type: "streamlit:setComponentValue", value: parseFloat(val)}, "*"); 
+                    // VALIDADOR JS: Alerta para confirmar que el botón funciona
+                    alert("JavaScript enviando: " + val);
+                    window.parent.postMessage({
+                        type: "streamlit:setComponentValue", 
+                        value: {"monto": parseFloat(val), "t": Date.now()}
+                    }, "*"); 
                 }
-            } catch(e) {}
+            } catch(e) { alert("Error al evaluar: " + e); }
         }
     </script>
     """
@@ -173,7 +178,6 @@ def ingreso_inventario_pantalla(local_id, user_key):
     if user_key not in st.session_state.carritos: st.session_state.carritos[user_key] = []
     if 'show_calc' not in st.session_state: st.session_state.show_calc = False
     if 'resultado_calc' not in st.session_state: st.session_state.resultado_calc = None
-    # Mejora: Key para resetear el buscador
     if 'prod_search_key' not in st.session_state: st.session_state.prod_search_key = 0
 
     res = supabase.table("productos_maestro").select("*").execute().data
@@ -184,7 +188,6 @@ def ingreso_inventario_pantalla(local_id, user_key):
     prod_map = {f"{p['nombre']} | {p['formato_medida']}": p for p in res}
     opciones = sorted(list(prod_map.keys()))
     
-    # Mejora: El key dinámico search_key permite limpiar el buscador al cambiar el valor
     sel = st.selectbox("Selecciona producto:", [""] + opciones, key=f"search_{st.session_state.prod_search_key}")
     
     if sel:
@@ -207,10 +210,14 @@ def ingreso_inventario_pantalla(local_id, user_key):
 
         if st.session_state.show_calc:
             with st.expander("Calculadora", expanded=True):
+                # VALIDADOR PYTHON: Ver qué llega al script
                 calc_val = calculadora_basica()
+                st.write(f"DEBUG RECEPCIÓN: {calc_val}")
+                
                 if calc_val is not None:
                     try:
-                        st.session_state.resultado_calc = float(calc_val)
+                        # Extraemos el valor del objeto recibido
+                        st.session_state.resultado_calc = float(calc_val["monto"])
                         st.session_state.show_calc = False
                         st.rerun()
                     except: pass
@@ -221,7 +228,6 @@ def ingreso_inventario_pantalla(local_id, user_key):
                 "Cantidad": float(cant if cant is not None else 0), "Formato": p['formato_medida'], "Factor": extraer_valor_formato(p['formato_medida'])
             })
             st.toast("✅ Añadido")
-            # Mejora: Resetear valores y cambiar key del buscador para limpiarlo
             st.session_state.resultado_calc = None
             st.session_state.prod_search_key += 1
             st.rerun()
@@ -288,7 +294,6 @@ def auditoria_pantalla(local_id):
     st.info("Este módulo es de comparación temporal. Los datos no se guardan en la DB.")
     
     if 'audit_list' not in st.session_state: st.session_state.audit_list = []
-    # Mejora: Key para resetear el buscador en auditoría
     if 'audit_search_key' not in st.session_state: st.session_state.audit_search_key = 1000
     
     stock_actual = obtener_stock_dict(local_id)
@@ -301,7 +306,6 @@ def auditoria_pantalla(local_id):
     prod_map = {f"{p['nombre']} | {p['formato_medida']}": p for p in res_prod}
     
     with st.expander("➕ Añadir Producto a Revisión", expanded=True):
-        # Mejora: Key dinámica para limpiar buscador
         sel = st.selectbox("Selecciona producto:", [""] + sorted(list(prod_map.keys())), key=f"audit_sel_{st.session_state.audit_search_key}")
         if sel:
             p = prod_map[sel]
@@ -322,7 +326,6 @@ def auditoria_pantalla(local_id):
                     "Físico": cant_fisica if cant_fisica is not None else 0,
                     "Diferencia": round((cant_fisica if cant_fisica is not None else 0) - stock_sistema, 2)
                 })
-                # Mejora: Resetear buscador auditoría
                 st.session_state.audit_search_key += 1
                 st.rerun()
 
