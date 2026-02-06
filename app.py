@@ -35,6 +35,8 @@ def logout():
         del st.session_state.auth_user
     if "carritos" in st.session_state:
         st.session_state.carritos = {}
+    if "audit_list" in st.session_state:
+        del st.session_state.audit_list
     st.query_params.clear()
     st.rerun()
 
@@ -233,6 +235,74 @@ def ingreso_inventario_pantalla(local_id, user_key):
             st.markdown('</div>', unsafe_allow_html=True)
 
 # ==========================================
+# NUEVO: PANTALLA AUDITORÍA (MÓDULO DE COMPARACIÓN)
+# ==========================================
+def auditoria_pantalla(local_id):
+    st.header("🔎 Módulo de Auditoría")
+    st.info("Este módulo es de comparación temporal. Los datos no se guardan en la DB.")
+    
+    if 'audit_list' not in st.session_state: st.session_state.audit_list = []
+    
+    # Obtener stock actual para comparar
+    stock_actual = obtener_stock_dict(local_id)
+    res_prod = supabase.table("productos_maestro").select("*").execute().data
+    
+    if not res_prod:
+        st.warning("No hay productos en el maestro.")
+        return
+
+    prod_map = {f"{p['nombre']} | {p['formato_medida']}": p for p in res_prod}
+    
+    with st.expander("➕ Añadir Producto a Revisión", expanded=True):
+        sel = st.selectbox("Selecciona producto:", [""] + sorted(list(prod_map.keys())), key="audit_sel")
+        if sel:
+            p = prod_map[sel]
+            factor = extraer_valor_formato(p['formato_medida'])
+            stock_sistema = round(stock_actual.get(p['id'], 0) / factor, 2)
+            
+            c1, c2 = st.columns(2)
+            cant_fisica = c1.number_input("Conteo Físico:", min_value=0.0, step=0.1)
+            
+            if c2.button("Registrar Comparación"):
+                # Evitar duplicados en la lista de auditoría actual
+                st.session_state.audit_list = [i for i in st.session_state.audit_list if i['id'] != p['id']]
+                
+                st.session_state.audit_list.append({
+                    "id": p['id'],
+                    "Producto": p['nombre'],
+                    "Formato": p['formato_medida'],
+                    "Sistema": stock_sistema,
+                    "Físico": cant_fisica,
+                    "Diferencia": round(cant_fisica - stock_sistema, 2)
+                })
+                st.rerun()
+
+    if st.session_state.audit_list:
+        st.subheader("📋 Lista de Comparación")
+        df_audit = pd.DataFrame(st.session_state.audit_list)
+        
+        # Estilo para resaltar diferencias
+        def style_diff(v):
+            if v < 0: return 'color: #ff4b4b;'
+            if v > 0: return 'color: #28a745;'
+            return ''
+
+        st.dataframe(
+            df_audit.drop(columns=['id']), 
+            use_container_width=True,
+            hide_index=True
+        )
+        
+        col_acc1, col_acc2 = st.columns(2)
+        if col_acc1.button("🗑️ Limpiar Lista"):
+            st.session_state.audit_list = []
+            st.rerun()
+            
+        # Opción para exportar
+        csv = df_audit.to_csv(index=False).encode('utf-8')
+        col_acc2.download_button("📥 Descargar Reporte (CSV)", csv, "auditoria.csv", "text/csv")
+
+# ==========================================
 # 7. PANTALLA: REPORTES
 # ==========================================
 def reportes_pantalla(local_id):
@@ -287,44 +357,43 @@ def admin_maestro(local_id):
             st.rerun()
 
 # ==========================================
-# 9. PANTALLA: USUARIOS
+# 9. PANTALLA: USUARIOS (ACTUALIZADA PARA MULTIPERFIL)
 # ==========================================
 def admin_usuarios(locales_map):
     st.header("👤 Gestión de Usuarios")
     
     if 'u_mode' not in st.session_state: st.session_state.u_mode = None
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        if st.button("➕ Nuevo Admin"): st.session_state.u_mode = "Admin"
-    with c2:
-        if st.button("➕ Nuevo Staff"): st.session_state.u_mode = "Staff"
-    with c3:
-        if st.button("✖️ Cerrar Formulario"): st.session_state.u_mode = None
+    c1, c2 = st.columns(2)
+    if c1.button("➕ Nuevo Usuario"): st.session_state.u_mode = "Nuevo"
+    if c2.button("✖️ Cerrar Formulario"): st.session_state.u_mode = None
     
     if st.session_state.u_mode:
         with st.form("user_new"):
-            st.subheader(f"Crear {st.session_state.u_mode}")
+            st.subheader("Crear Usuario")
             nombre = st.text_input("Nombre Completo")
             user_log = st.text_input("Usuario (Login)")
             pw = st.text_input("Contraseña", type="password")
-            l_id = 1
-            if st.session_state.u_mode == "Staff":
-                l_sel = st.selectbox("Sede Asignada", list(locales_map.keys()))
-                l_id = locales_map[l_sel]
-            if st.form_submit_button("Registrar Usuario"):
-                if nombre and user_log and pw:
+            
+            # Selección de múltiples roles
+            roles_asignados = st.multiselect("Asignar Perfiles:", ["Admin", "Staff", "Auditor"])
+            
+            l_sel = st.selectbox("Sede Asignada", list(locales_map.keys()))
+            l_id = locales_map[l_sel]
+            
+            if st.form_submit_button("Registrar"):
+                if nombre and user_log and pw and roles_asignados:
+                    # Guardamos el rol como JSON string para manejar la lista
                     supabase.table("usuarios_sistema").upsert({
                         "nombre_apellido": nombre, "id_local": l_id, 
-                        "usuario": user_log, "clave": pw, "rol": st.session_state.u_mode
+                        "usuario": user_log, "clave": pw, "rol": json.dumps(roles_asignados)
                     }, on_conflict="usuario").execute()
-                    st.success("Usuario registrado con éxito.")
+                    st.success("Registrado.")
                     st.session_state.u_mode = None
                     st.rerun()
                 else:
-                    st.warning("Completa todos los campos.")
+                    st.warning("Completa todos los campos y selecciona al menos un rol.")
 
     st.markdown("---")
-    
     st.subheader("👥 Usuarios Registrados")
     try:
         res_u = supabase.table("usuarios_sistema").select("*").execute().data
@@ -332,13 +401,15 @@ def admin_usuarios(locales_map):
             df_users = pd.DataFrame(res_u)
             locales_inv = {v: k for k, v in locales_map.items()}
             df_users['Sede'] = df_users['id_local'].map(locales_inv)
-            df_view = df_users[['nombre_apellido', 'usuario', 'clave', 'rol', 'Sede']].copy()
-            df_view.columns = ['Nombre', 'Login', 'Contraseña', 'Rol', 'Sede']
-            st.dataframe(df_view, use_container_width=True)
-        else:
-            st.info("No hay usuarios registrados.")
-    except Exception as e:
-        st.error(f"Error: {e}")
+            
+            # Limpiar visualización de roles
+            def clean_roles(r):
+                try: return ", ".join(json.loads(r)) if "[" in r else r
+                except: return r
+            
+            df_users['Perfiles'] = df_users['rol'].apply(clean_roles)
+            st.dataframe(df_users[['nombre_apellido', 'usuario', 'Perfiles', 'Sede']], use_container_width=True)
+    except Exception as e: st.error(f"Error: {e}")
 
 # ==========================================
 # 10. MAIN
@@ -354,11 +425,18 @@ def main():
                 p = st.text_input("Contraseña", type="password")
                 if st.form_submit_button("ENTRAR"):
                     if u.lower() == "admin" and p == "654321.":
-                        st.session_state.auth_user = {"user": "Master", "role": "Admin", "local": 1}
+                        st.session_state.auth_user = {"user": "Master", "role": ["Admin"], "local": 1}
                         st.rerun()
                     res = supabase.table("usuarios_sistema").select("*").eq("usuario", u).eq("clave", p).execute().data
                     if res:
-                        st.session_state.auth_user = {"user": res[0]['usuario'], "role": res[0]['rol'], "local": res[0]['id_local']}
+                        # Parsear roles si vienen como JSON
+                        try: 
+                            roles = json.loads(res[0]['rol'])
+                            if not isinstance(roles, list): roles = [roles]
+                        except: 
+                            roles = [res[0]['rol']]
+                            
+                        st.session_state.auth_user = {"user": res[0]['usuario'], "role": roles, "local": res[0]['id_local']}
                         st.rerun()
                     else: st.error("Error de login.")
         return
@@ -367,19 +445,30 @@ def main():
     locales = get_locales_map()
     locales_inv = {v: k for k, v in locales.items()}
     
-    if 'opt' not in st.session_state: st.session_state.opt = "📋 Ingreso"
-    
-    st.sidebar.image("Logo AE.jpg", use_container_width=True)
-    
-    if user['role'] == "Admin" and locales:
+    # Lógica de cambio de sede para Admins
+    if "Admin" in user['role'] and locales:
         actual_name = locales_inv.get(user['local'], list(locales.keys())[0])
         idx = list(locales.keys()).index(actual_name)
         nueva_sede = st.sidebar.selectbox("Sede Activa:", list(locales.keys()), index=idx)
         user['local'] = locales[nueva_sede]
     
+    st.sidebar.image("Logo AE.jpg", use_container_width=True)
     st.sidebar.markdown(f'<div class="user-info">👤 {user["user"]}<br>📍 {locales_inv.get(user["local"], "N/A")}</div>', unsafe_allow_html=True)
     
-    menu = ["📋 Ingreso", "📊 Reportes", "👤 Usuarios", "⚙️ Maestro"] if user['role'] == "Admin" else ["📋 Ingreso", "📊 Reportes"]
+    # --- CONSTRUCCIÓN DINÁMICA DEL MENÚ ---
+    menu_options = []
+    if "Staff" in user['role'] or "Admin" in user['role']:
+        menu_options.extend(["📋 Ingreso", "📊 Reportes"])
+    if "Auditor" in user['role'] or "Admin" in user['role']:
+        if "🔎 Auditoría" not in menu_options: menu_options.append("🔎 Auditoría")
+    if "Admin" in user['role']:
+        menu_options.extend(["👤 Usuarios", "⚙️ Maestro"])
+    
+    # Limpiar duplicados manteniendo el orden
+    menu = list(dict.fromkeys(menu_options))
+    
+    if 'opt' not in st.session_state or st.session_state.opt not in menu: 
+        st.session_state.opt = menu[0]
     
     for item in menu:
         estilo = "nav-active" if st.session_state.opt == item else ""
@@ -391,8 +480,10 @@ def main():
     
     if st.sidebar.button("🚪 SALIR"): logout()
     
+    # --- NAVEGACIÓN ---
     if st.session_state.opt == "📋 Ingreso": ingreso_inventario_pantalla(user['local'], user['user'])
     elif st.session_state.opt == "📊 Reportes": reportes_pantalla(user['local'])
+    elif st.session_state.opt == "🔎 Auditoría": auditoria_pantalla(user['local'])
     elif st.session_state.opt == "👤 Usuarios": admin_usuarios(locales)
     elif st.session_state.opt == "⚙️ Maestro": admin_maestro(user['local'])
 
