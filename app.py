@@ -7787,8 +7787,10 @@ elif modulo.startswith("📊"):
                                 _ws_out.cell(_r, 5).value  = round(_dia_v)  if _dia_v  else 0
                                 _ws_out.cell(_r, 7).value  = round(_acum_v) if _acum_v else 0
                                 # AE6:AE35 — fórmulas de la plantilla (=G/_M$2*30), NO sobreescribir
-                                # Histórico mensual
+                                # Histórico mensual — cols I(9):AD(30) vienen del template, no tocar
                                 for _col_h, (_aa_h, _mm_h) in _EXP_COL_MES.items():
+                                    if _col_h <= 30:
+                                        continue  # I:AD — respetar valores del template
                                     _mv = _mens_val(_loc, _tipo.upper(), _aa_h, _mm_h)
                                     if _mv > 0:
                                         _ws_out.cell(_r, _col_h).value = round(_mv)
@@ -7808,7 +7810,10 @@ elif modulo.startswith("📊"):
                             _ws_out.cell(_r_tot, 5).value  = round(_tot_dia)
                             _ws_out.cell(_r_tot, 7).value  = round(_tot_acum)
                             # AE (col31) fila total — fórmula plantilla, NO sobreescribir
+                            # Cols I(9):AD(30) — respetar valores del template
                             for _col_h, (_aa_h, _mm_h) in _EXP_COL_MES.items():
+                                if _col_h <= 30:
+                                    continue
                                 _mv_s = _mens_val(_loc, 'SALON',    _aa_h, _mm_h)
                                 _mv_d = _mens_val(_loc, 'DELIVERY', _aa_h, _mm_h)
                                 if (_mv_s + _mv_d) > 0:
@@ -7883,6 +7888,8 @@ elif modulo.startswith("📊"):
                             _ws_out.cell(_ar, 31).value = round(_aliva_p, 2) if _aliva_p else 0
                             # Histórico Aliva desde ventas_aliva por mes
                             for _col_h, (_aa_h, _mm_h) in _EXP_COL_MES.items():
+                                if _col_h <= 30:
+                                    continue  # I:AD — respetar valores del template
                                 _df_aliva_mes = run_query("""
                                     SELECT SUM(monto_total) AS venta FROM ventas_aliva
                                     WHERE EXTRACT(YEAR FROM fecha)=:a AND EXTRACT(MONTH FROM fecha)=:m
